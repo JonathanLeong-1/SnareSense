@@ -1,0 +1,973 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SnareSense</title>
+    <link rel="stylesheet" href="styles.css?v=20260523-persistence" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero panel">
+        <div>
+          <p class="eyebrow">Local Prototype</p>
+          <h1>SnareSense</h1>
+          <p class="hero-copy">
+            Real-time transient detection with a timing-first interface built around the beat
+            timeline.
+          </p>
+        </div>
+        <div class="hero-status">
+          <div class="status-group">
+            <div id="hitIndicator" class="hit-indicator" aria-label="Hit indicator"></div>
+            <div>
+              <p class="stat-label">Capture status</p>
+              <p id="captureStatus" class="status-text">Idle</p>
+            </div>
+          </div>
+          <div class="status-group">
+            <div
+              id="metronomeIndicator"
+              class="metronome-indicator"
+              aria-label="Metronome indicator"
+            ></div>
+            <div>
+              <p class="stat-label">Metronome</p>
+              <p id="metronomeStatus" class="status-text">Armed</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="mode-header">
+        <nav class="mode-switcher" aria-label="App mode">
+          <button id="liveModeButton" class="mode-button is-active" type="button">
+            Live Timeline
+          </button>
+          <button id="exerciseModeButton" class="mode-button" type="button">
+            Exercise Analysis
+          </button>
+          <button id="settingsModeButton" class="mode-button" type="button">
+            Detection Settings
+          </button>
+          <button id="statsModeButton" class="mode-button" type="button">
+            Stats
+          </button>
+        </nav>
+
+        <section class="panel exercise-hero-panel">
+          <div>
+            <p class="eyebrow">Exercise Analysis</p>
+            <h2>Written snare reps with timing feedback</h2>
+          </div>
+          <p class="exercise-copy">
+            Load an exercise, choose a tempo, play the rep, then review rushing and dragging.
+          </p>
+        </section>
+      </div>
+
+      <section id="timelineWorkspace" class="timeline-workspace">
+      <section class="transport-strip">
+        <div class="transport-line">
+          <label class="control transport-inline-control">
+            <span>Audio source</span>
+            <select id="deviceSelect"></select>
+          </label>
+
+          <button id="refreshDevicesButton" class="ghost-button compact-button" type="button">
+            Refresh Devices
+          </button>
+
+          <div class="button-row transport-inline-buttons">
+            <button id="startButton" class="primary-button" type="button">Start</button>
+            <button id="stopButton" class="ghost-button" type="button" disabled>Stop</button>
+          </div>
+
+          <div class="button-row transport-inline-buttons">
+            <button id="exportButton" class="ghost-button" type="button" disabled>Export CSV</button>
+            <button id="clearLogButton" class="ghost-button" type="button">Clear Log</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="timeline-layout">
+        <section class="panel timeline-panel">
+          <div class="panel-header panel-header-stack timeline-header">
+            <div>
+              <h2>Beat Timeline</h2>
+              <p>
+                Metronome clicks are shown on the upper lane, detected drum hits on the lower lane.
+                Scroll horizontally through the full timing history.
+              </p>
+            </div>
+            <div class="timeline-toolbar">
+              <div id="fullscreenTransportHost" class="fullscreen-transport-host"></div>
+              <div class="legend-row">
+                <span class="legend-chip legend-hit">Detected hit</span>
+                <span class="legend-chip legend-click">Metronome click</span>
+              </div>
+              <div class="timeline-actions">
+                <div class="zoom-controls">
+                  <span class="zoom-label">Zoom</span>
+                  <div id="zoomButtonRow" class="zoom-button-row">
+                    <button
+                      id="timelineZoomOutButton"
+                      class="ghost-button compact-button zoom-button"
+                      type="button"
+                    >
+                      −
+                    </button>
+                    <output id="timelineZoomValue" class="zoom-value">1.0x</output>
+                    <button
+                      id="timelineZoomInButton"
+                      class="ghost-button compact-button zoom-button"
+                      type="button"
+                    >
+                      +
+                    </button>
+                    <button
+                      id="timelineFullscreenButton"
+                      class="ghost-button compact-button timeline-fullscreen-button"
+                      type="button"
+                    >
+                      Fullscreen
+                    </button>
+                  </div>
+                </div>
+                <button id="jumpToLiveButton" class="ghost-button compact-button" type="button">
+                  Jump To Live
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="timelineScroll" class="timeline-scroll-wrap timeline-scroll-large">
+            <canvas id="timelineCanvas" width="1400" height="320"></canvas>
+            <div id="timelineVirtualWidth" class="timeline-virtual-width" aria-hidden="true"></div>
+          </div>
+          <div class="timeline-footer">
+            <div class="session-strip session-strip-inline">
+              <div class="session-stat">
+                <span class="stat-label">Hit count</span>
+                <strong id="hitCount">0</strong>
+              </div>
+              <div class="session-stat">
+                <span class="stat-label">Estimated BPM</span>
+                <strong id="bpmValue">--</strong>
+              </div>
+              <div class="session-stat">
+                <span class="stat-label">Last hit</span>
+                <strong id="lastHitValue">--</strong>
+              </div>
+              <div class="session-stat">
+                <span class="stat-label">Sample rate</span>
+                <strong id="sampleRateValue">--</strong>
+              </div>
+            </div>
+            <div id="messageBanner" class="message-banner" hidden></div>
+          </div>
+        </section>
+
+        <div id="metronomeResizeHandle" class="fullscreen-side-resize" aria-hidden="true"></div>
+        <aside id="metronomePanel" class="panel metronome-panel">
+          <button
+            id="metronomeCollapseButton"
+            class="fullscreen-drawer-toggle fullscreen-sidebar-toggle"
+            type="button"
+            aria-label="Collapse metronome sidebar"
+          >
+            ◀
+          </button>
+          <div class="subsection metronome-card">
+            <div class="subsection-header">
+              <h3>Metronome</h3>
+              <label class="toggle-label">
+                <input id="metronomeEnabledInput" type="checkbox" checked />
+                <span>Enable in session</span>
+              </label>
+            </div>
+
+            <label class="control">
+              <div class="control-title">
+                <span>Tempo</span>
+                <output id="metronomeTempoValue">120 BPM</output>
+              </div>
+              <input
+                id="metronomeTempoInput"
+                type="range"
+                min="40"
+                max="240"
+                step="1"
+                value="120"
+              />
+            </label>
+
+            <label class="control">
+              <span>Tempo number</span>
+              <input
+                id="metronomeTempoNumber"
+                class="number-input"
+                type="number"
+                min="40"
+                max="240"
+                step="1"
+                value="120"
+              />
+            </label>
+
+            <label class="control">
+              <div class="control-title">
+                <span>Subdivision</span>
+                <output id="metronomeSubdivisionValue">Quarter</output>
+              </div>
+              <select id="metronomeSubdivisionSelect" class="number-input">
+                <option value="whole">Whole</option>
+                <option value="half">Half</option>
+                <option value="quarter" selected>Quarter</option>
+                <option value="eighth">Eighth</option>
+                <option value="triplet">Triplet</option>
+                <option value="sixteenth">Sixteenth</option>
+                <option value="thirtysecond">32nd</option>
+              </select>
+            </label>
+
+            <div class="control">
+              <div class="control-title">
+                <span>Time signature</span>
+                <output id="metronomeTimeSignatureValue">4/4</output>
+              </div>
+              <div class="time-signature-row">
+                <input
+                  id="metronomeNumeratorInput"
+                  class="number-input"
+                  type="number"
+                  min="1"
+                  max="16"
+                  step="1"
+                  value="4"
+                />
+                <span class="time-signature-slash">/</span>
+                <select id="metronomeDenominatorSelect" class="number-input">
+                  <option value="2">2</option>
+                  <option value="4" selected>4</option>
+                  <option value="8">8</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="accent-popover">
+              <button id="accentPatternButton" class="ghost-button compact-button accent-popover-summary" type="button">
+                Adjust Accent Pattern
+              </button>
+              <div id="accentPatternPopover" class="control accent-control accent-popover-content" hidden>
+                <div class="control-title">
+                  <span>Accents</span>
+                  <span class="accent-caption">Click cycles normal, accent, strong, normal</span>
+                </div>
+                <div id="metronomeAccentButtons" class="accent-grid"></div>
+              </div>
+            </div>
+
+            <button
+              id="exerciseGuideToggleButton"
+              class="ghost-button compact-button exercise-guide-button"
+              type="button"
+              aria-pressed="false"
+            >
+              Play exercise during reps
+            </button>
+            <input id="exerciseGuideEnabledInput" type="checkbox" hidden />
+
+          </div>
+        </aside>
+      </section>
+      </section>
+
+      <section id="debugHomeHost" class="debug-home-host">
+        <details id="debugPanel" class="panel collapsible-panel detector-debug-panel" open>
+          <summary class="collapsible-summary detector-debug-summary">
+            <div>
+              <h2>Detector Debug</h2>
+              <p>Chunk-level amplitude, filtered transient strength, threshold, and trigger state.</p>
+            </div>
+          </summary>
+          <div class="collapsible-content detector-debug-content">
+            <canvas id="debugCanvas" width="960" height="280"></canvas>
+            <div class="debug-readout-grid">
+              <div class="debug-chip">
+                <span>Raw amplitude</span>
+                <strong id="rawAmplitudeValue">0.000</strong>
+              </div>
+              <div class="debug-chip">
+                <span>Filtered amplitude</span>
+                <strong id="filteredAmplitudeValue">0.000</strong>
+              </div>
+              <div class="debug-chip">
+                <span>Threshold line</span>
+                <strong id="thresholdLineValue">0.000</strong>
+              </div>
+              <div class="debug-chip">
+                <span>Hit triggered</span>
+                <strong id="triggeredValue">No</strong>
+              </div>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section id="settingsModeSection" class="settings-mode-section" hidden>
+        <section class="panel settings-hero-panel">
+          <div>
+            <p class="eyebrow">Detector Setup</p>
+            <h2>Detection Settings</h2>
+            <p>
+              Tune transient detection, run latency calibration, and monitor the detector signal
+              without leaving the app.
+            </p>
+          </div>
+        </section>
+
+      <div class="drawer-grid">
+        <details class="panel collapsible-panel" open>
+          <summary class="collapsible-summary">
+            <div>
+              <h2>Detection Calibration</h2>
+              <p>Tune transient detection manually or run a guided setup for your trigger.</p>
+            </div>
+          </summary>
+          <div class="collapsible-content calibration-panel">
+            <label class="control">
+              <div class="control-title">
+                <span>Detection threshold</span>
+                <output id="thresholdValue">0.085</output>
+              </div>
+              <input
+                id="thresholdInput"
+                type="range"
+                min="0.001"
+                max="0.08"
+                step="0.001"
+                value="0.005"
+              />
+            </label>
+
+            <label class="control">
+              <div class="control-title">
+                <span>Refractory period</span>
+                <output id="refractoryValue">72 ms</output>
+              </div>
+              <input
+                id="refractoryInput"
+                type="range"
+                min="5"
+                max="120"
+                step="1"
+                value="20"
+              />
+            </label>
+
+            <label class="control">
+              <div class="control-title">
+                <span>Smoothing / filtering</span>
+                <output id="smoothingValue">0.58</output>
+              </div>
+              <input
+                id="smoothingInput"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0.58"
+              />
+            </label>
+
+            <div class="calibration-actions">
+              <button id="startAutoTuneButton" class="primary-button" type="button">
+                Start Detection Calibration
+              </button>
+              <button id="resetDetectionDefaultsButton" class="ghost-button" type="button">
+                Reset Defaults
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel collapsible-panel" open>
+          <summary class="collapsible-summary">
+            <div>
+              <h2>Timing Calibration</h2>
+              <p>Estimate and apply a constant timing offset so hits line up with the click.</p>
+            </div>
+          </summary>
+          <div class="collapsible-content calibration-panel">
+            <div class="calibration-summary">
+              <div class="calibration-chip">
+                <span>Current compensation</span>
+                <strong id="latencyCompensationValue">0.0 ms</strong>
+              </div>
+              <div class="calibration-chip">
+                <span>Status</span>
+                <strong id="calibrationStatusValue">Ready</strong>
+              </div>
+            </div>
+
+            <p id="calibrationInstructionText" class="calibration-instructions">
+              Open the calibration screen to run the guided latency check with the selected audio source.
+            </p>
+
+            <div class="calibration-actions">
+              <button id="startCalibrationButton" class="primary-button" type="button">
+                Start Timing Calibration
+              </button>
+              <button id="resetCalibrationButton" class="ghost-button" type="button">
+                Reset to 0 ms
+              </button>
+            </div>
+
+            <div class="calibration-actions calibration-trim-row">
+              <span class="calibration-trim-label">Manual trim</span>
+              <button id="nudgeCalibrationBackButton" class="ghost-button compact-button" type="button">
+                −5 ms
+              </button>
+              <button id="nudgeCalibrationForwardButton" class="ghost-button compact-button" type="button">
+                +5 ms
+              </button>
+            </div>
+          </div>
+        </details>
+      </div>
+      </section>
+
+      <section id="exerciseModeSection" class="exercise-mode-section" hidden>
+        <section class="exercise-control-strip">
+          <label class="control exercise-inline-control">
+            <span>Exercise</span>
+            <select id="exerciseSelect">
+              <option value="8ts" selected>8ts · Eighth Notes</option>
+              <option value="accent-tap">Accent Tap</option>
+              <option value="16th-note-grid">16th Note Grid</option>
+              <option value="triplet-rolls">Triplet Rolls</option>
+              <option value="triplet-grid">Triplet Grid</option>
+              <option value="pats">Pats</option>
+              <option value="paradiddles">Paradiddles</option>
+            </select>
+          </label>
+          <label class="control exercise-inline-control exercise-audio-control">
+            <span>Audio source</span>
+            <select id="exerciseDeviceSelect"></select>
+          </label>
+          <label class="ghost-button compact-button upload-button">
+            Upload .mxl
+            <input id="exerciseUploadInput" type="file" accept=".mxl,.musicxml,.xml" hidden />
+          </label>
+          <label class="control exercise-tempo-control">
+            <span>Tempo</span>
+            <input id="exerciseTempoInput" class="number-input" type="number" min="40" max="240" step="1" value="120" />
+            <span>BPM</span>
+          </label>
+          <div class="button-row exercise-transport-buttons">
+            <button id="exerciseStartButton" class="primary-button" type="button">Start Rep</button>
+            <button id="exerciseStopButton" class="ghost-button" type="button" disabled>Stop Rep</button>
+          </div>
+        </section>
+
+        <section class="exercise-grid">
+          <section class="panel exercise-sheet-panel">
+            <div class="panel-header exercise-panel-header">
+              <div>
+                <h2 id="exerciseTitle">8ts</h2>
+                <p id="exerciseMetadata">Loading bundled exercise...</p>
+              </div>
+              <div class="exercise-mini-stats">
+                <span id="exercisePartValue">Part: --</span>
+                <span id="exerciseHitTargetValue">Targets: --</span>
+                <span id="exerciseDurationValue">Duration: --</span>
+                <button id="exerciseHeatmapButton" class="ghost-button compact-button exercise-heatmap-button" type="button">
+                  Historical Performance
+                </button>
+                <button id="exerciseListenButton" class="primary-button compact-button exercise-listen-button" type="button">
+                  Listen
+                </button>
+              </div>
+            </div>
+            <div id="sheetMusicContainer" class="sheet-music-container">
+              <div class="sheet-placeholder">Loading sheet music...</div>
+            </div>
+            <div id="exerciseWarnings" class="exercise-warnings" hidden></div>
+          </section>
+
+          <section class="exercise-side-column">
+            <aside id="exerciseMetronomeHost" class="exercise-metronome-host"></aside>
+          </section>
+        </section>
+
+        <section id="exerciseReviewGrid" class="exercise-review-grid">
+          <details id="exerciseTimelinePanel" class="panel collapsible-panel exercise-review-panel exercise-timeline-panel" open>
+            <summary class="collapsible-summary exercise-review-summary">
+              <div>
+                <h2>Exercise Timeline</h2>
+                <p>Written targets are shown on the upper lane, your detected hits on the lower lane.</p>
+              </div>
+              <div class="exercise-panel-actions">
+                <div class="legend-row">
+                  <span class="legend-chip legend-click">Written target</span>
+                  <span class="legend-chip legend-hit">Detected hit</span>
+                </div>
+              </div>
+            </summary>
+            <div id="exerciseTimelineBody" class="collapsible-content exercise-collapse-body">
+              <div id="exerciseTimelineScroll" class="timeline-scroll-wrap exercise-scroll-wrap">
+              <canvas id="exerciseTimelineCanvas" width="1200" height="300"></canvas>
+              <div id="exerciseTimelineVirtualWidth" class="timeline-virtual-width" aria-hidden="true"></div>
+              </div>
+            </div>
+          </details>
+
+          <details id="exerciseOffsetPanel" class="panel collapsible-panel exercise-review-panel exercise-offset-panel" open>
+            <summary class="collapsible-summary exercise-review-summary">
+              <div>
+                <h2>Rushing / Dragging</h2>
+                <p>Positive orange values are rushing, negative blue values are dragging.</p>
+              </div>
+            </summary>
+            <div id="exerciseOffsetBody" class="collapsible-content exercise-collapse-body">
+              <canvas id="exerciseOffsetCanvas" width="720" height="300"></canvas>
+            </div>
+          </details>
+        </section>
+
+        <section class="panel session-history-panel">
+          <div class="panel-header exercise-panel-header">
+            <div>
+              <h2>Session History</h2>
+              <p>Saved reps, timing tendency, and miniature rush/drag graphs.</p>
+            </div>
+            <button id="clearRepHistoryButton" class="ghost-button compact-button danger-button" type="button">
+              Clear History
+            </button>
+          </div>
+          <div id="sessionHistoryList" class="session-history-list"></div>
+        </section>
+      </section>
+
+      <section id="statsModeSection" class="stats-mode-section" hidden>
+        <section class="panel stats-hero-panel">
+          <div>
+            <p class="eyebrow">Stats</p>
+            <h2>Lifetime Stats</h2>
+            <p class="exercise-copy">
+              Persistent totals, exercise rankings, and timing tendencies saved locally in this browser.
+            </p>
+          </div>
+          <section class="stats-grid" id="lifetimeStatsGrid"></section>
+        </section>
+
+        <section class="panel exercise-ranking-panel">
+          <div class="panel-header exercise-panel-header">
+            <div>
+              <h2>Exercise Rankings</h2>
+              <p>Ranked by average score, high score, and consistency.</p>
+            </div>
+          </div>
+          <div id="exerciseStatsList" class="exercise-stats-list"></div>
+        </section>
+      </section>
+    </main>
+
+    <section id="autoTuneOverlay" class="calibration-overlay" hidden>
+      <div class="calibration-overlay-backdrop"></div>
+      <div class="calibration-overlay-shell">
+        <div class="calibration-screen panel">
+          <div class="calibration-screen-header">
+            <button
+              id="cancelAutoTuneButton"
+              class="ghost-button compact-button calibration-back-button"
+              type="button"
+            >
+              Close
+            </button>
+            <div class="calibration-screen-copy">
+              <p class="eyebrow">Guided Calibration</p>
+              <h2>Detection Calibration</h2>
+              <p id="autoTuneInstructionText" class="calibration-screen-instructions">
+                Press start, stay silent for the noise check, play very soft fast taps, then play loud taps.
+              </p>
+            </div>
+          </div>
+
+          <div class="calibration-screen-body">
+            <div class="calibration-progress-card">
+              <div class="calibration-progress-wrap">
+                <svg
+                  class="calibration-progress-svg"
+                  viewBox="0 0 240 240"
+                  aria-hidden="true"
+                >
+                  <defs>
+                    <linearGradient id="auto-tune-progress-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#73e0a9"></stop>
+                      <stop offset="100%" stop-color="#8ae8f3"></stop>
+                    </linearGradient>
+                  </defs>
+                  <circle
+                    class="calibration-progress-track"
+                    cx="120"
+                    cy="120"
+                    r="92"
+                  ></circle>
+                  <circle
+                    id="autoTuneProgressRing"
+                    class="calibration-progress-ring auto-tune-progress-ring"
+                    cx="120"
+                    cy="120"
+                    r="92"
+                  ></circle>
+                </svg>
+                <div class="calibration-progress-center">
+                  <span class="calibration-progress-label">Progress</span>
+                  <strong id="autoTuneProgressValue">Detection Setup</strong>
+                  <span id="autoTunePhaseValue" class="calibration-progress-phase">
+                    Awaiting start
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="calibration-screen-side">
+              <label class="control calibration-screen-audio-control">
+                <span>Audio source</span>
+                <select id="autoTuneDeviceSelect"></select>
+              </label>
+
+              <div class="calibration-screen-stage">
+                <span class="stat-label">Stage</span>
+                <strong id="autoTuneStatusValue">Ready</strong>
+              </div>
+
+              <div id="autoTuneScreenIdleActions" class="calibration-screen-actions">
+                <button
+                  id="autoTuneScreenStartButton"
+                  class="primary-button"
+                  type="button"
+                >
+                  Start
+                </button>
+              </div>
+
+              <div
+                id="autoTuneScreenResults"
+                class="calibration-screen-results"
+                hidden
+              >
+                <div class="calibration-metrics calibration-screen-metrics">
+                  <div class="calibration-chip">
+                    <span>Threshold</span>
+                    <strong id="autoTuneThresholdValue">--</strong>
+                  </div>
+                  <div class="calibration-chip">
+                    <span>Refractory</span>
+                    <strong id="autoTuneRefractoryValue">--</strong>
+                  </div>
+                  <div class="calibration-chip">
+                    <span>Smoothing</span>
+                    <strong id="autoTuneSmoothingValue">--</strong>
+                  </div>
+                  <div class="calibration-chip">
+                    <span>Quality</span>
+                    <strong id="autoTuneQualityValue">--</strong>
+                  </div>
+                </div>
+
+                <div class="calibration-screen-actions calibration-screen-actions-wide">
+                  <button
+                    id="acceptAutoTuneButton"
+                    class="primary-button"
+                    type="button"
+                    disabled
+                  >
+                    Apply Suggestions
+                  </button>
+                  <button
+                    id="discardAutoTuneButton"
+                    class="ghost-button"
+                    type="button"
+                    disabled
+                  >
+                    Discard
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <details id="autoTuneDebugPanel" class="calibration-debug-panel detector-debug-panel" open>
+            <summary class="metronome-debug-summary detector-debug-summary">
+              <div>
+                <h3>Detector Debug</h3>
+                <p>Watch raw amplitude, filtered transient strength, threshold, and trigger state.</p>
+              </div>
+            </summary>
+            <div class="metronome-debug-content detector-debug-content">
+              <canvas id="autoTuneDebugCanvas" width="960" height="220"></canvas>
+              <div class="debug-readout-grid">
+                <div class="debug-chip">
+                  <span>Raw amplitude</span>
+                  <strong id="autoTuneRawAmplitudeValue">0.000</strong>
+                </div>
+                <div class="debug-chip">
+                  <span>Filtered amplitude</span>
+                  <strong id="autoTuneFilteredAmplitudeValue">0.000</strong>
+                </div>
+                <div class="debug-chip">
+                  <span>Threshold line</span>
+                  <strong id="autoTuneThresholdLineValue">0.000</strong>
+                </div>
+                <div class="debug-chip">
+                  <span>Hit triggered</span>
+                  <strong id="autoTuneTriggeredValue">No</strong>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section id="calibrationOverlay" class="calibration-overlay" hidden>
+      <div class="calibration-overlay-backdrop"></div>
+      <div class="calibration-overlay-shell">
+        <div class="calibration-screen panel">
+          <div class="calibration-screen-header">
+            <button
+              id="calibrationScreenBackButton"
+              class="ghost-button compact-button calibration-back-button"
+              type="button"
+            >
+              Back
+            </button>
+            <div class="calibration-screen-copy">
+              <p class="eyebrow">Guided Calibration</p>
+              <h2>Timing Calibration</h2>
+              <p id="calibrationScreenInstructionText" class="calibration-screen-instructions">
+                Press start, listen to the two-bar tap-off, then come in with steady eighth notes for
+                the capture window.
+              </p>
+            </div>
+          </div>
+
+          <div class="calibration-screen-body">
+            <div class="calibration-progress-card">
+              <div class="calibration-progress-wrap">
+                <svg
+                  class="calibration-progress-svg"
+                  viewBox="0 0 240 240"
+                  aria-hidden="true"
+                >
+                  <defs>
+                    <linearGradient id="calibration-progress-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#73e0a9"></stop>
+                      <stop offset="100%" stop-color="#8ae8f3"></stop>
+                    </linearGradient>
+                  </defs>
+                  <circle
+                    class="calibration-progress-track"
+                    cx="120"
+                    cy="120"
+                    r="92"
+                  ></circle>
+                  <circle
+                    id="calibrationProgressRing"
+                    class="calibration-progress-ring"
+                    cx="120"
+                    cy="120"
+                    r="92"
+                  ></circle>
+                </svg>
+                <div class="calibration-progress-center">
+                  <span class="calibration-progress-label">Progress</span>
+                  <strong id="calibrationProgressValue">Timing Calibration</strong>
+                  <span id="calibrationPhaseValue" class="calibration-progress-phase">
+                    Awaiting start
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="calibration-screen-side">
+              <label class="control calibration-screen-audio-control">
+                <span>Audio source</span>
+                <select id="calibrationDeviceSelect"></select>
+              </label>
+
+              <div class="calibration-screen-stage">
+                <span class="stat-label">Stage</span>
+                <strong id="calibrationScreenStatusValue">Ready</strong>
+              </div>
+
+              <div id="calibrationScreenIdleActions" class="calibration-screen-actions">
+                <button
+                  id="calibrationScreenStartButton"
+                  class="primary-button"
+                  type="button"
+                >
+                  Start
+                </button>
+              </div>
+
+              <div
+                id="calibrationScreenResults"
+                class="calibration-screen-results"
+                hidden
+              >
+                <div class="calibration-metrics calibration-screen-metrics">
+                  <div class="calibration-chip">
+                    <span>Proposed offset</span>
+                    <strong id="calibrationOffsetValue">--</strong>
+                  </div>
+                  <div class="calibration-chip">
+                    <span>Usable hits</span>
+                    <strong id="calibrationUsableHitsValue">--</strong>
+                  </div>
+                  <div class="calibration-chip">
+                    <span>Jitter</span>
+                    <strong id="calibrationJitterValue">--</strong>
+                  </div>
+                  <div class="calibration-chip">
+                    <span>Quality</span>
+                    <strong id="calibrationQualityValue">--</strong>
+                  </div>
+                </div>
+
+                <div class="calibration-screen-actions calibration-screen-actions-wide">
+                  <button
+                    id="acceptCalibrationButton"
+                    class="primary-button"
+                    type="button"
+                    disabled
+                  >
+                    Accept
+                  </button>
+                  <button
+                    id="discardCalibrationButton"
+                    class="ghost-button"
+                    type="button"
+                    disabled
+                  >
+                    Discard
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <details id="settingsDebugPanel" class="calibration-debug-panel detector-debug-panel" open>
+            <summary class="metronome-debug-summary detector-debug-summary">
+              <div>
+                <h3>Detector Debug</h3>
+                <p>Watch raw amplitude, filtered transient strength, threshold, and trigger state.</p>
+              </div>
+            </summary>
+            <div class="metronome-debug-content detector-debug-content">
+              <canvas id="settingsDebugCanvas" width="960" height="220"></canvas>
+              <div class="debug-readout-grid">
+                <div class="debug-chip">
+                  <span>Raw amplitude</span>
+                  <strong id="settingsRawAmplitudeValue">0.000</strong>
+                </div>
+                <div class="debug-chip">
+                  <span>Filtered amplitude</span>
+                  <strong id="settingsFilteredAmplitudeValue">0.000</strong>
+                </div>
+                <div class="debug-chip">
+                  <span>Threshold line</span>
+                  <strong id="settingsThresholdLineValue">0.000</strong>
+                </div>
+                <div class="debug-chip">
+                  <span>Hit triggered</span>
+                  <strong id="settingsTriggeredValue">No</strong>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section id="exerciseResultOverlay" class="exercise-result-overlay" hidden>
+      <div class="exercise-result-card panel">
+        <button id="exerciseResultCloseButton" class="primary-button compact-button result-close-button" type="button">
+          Close
+        </button>
+        <p class="eyebrow">Rep Complete</p>
+        <h2 id="exerciseResultTitle">Score</h2>
+        <div class="exercise-result-score-wrap">
+          <span class="exercise-result-score-label">your score:</span>
+          <strong id="exerciseResultScore" class="exercise-result-score">--</strong>
+        </div>
+        <div class="exercise-result-grid">
+          <div class="debug-chip">
+            <span>Matched</span>
+            <strong id="exerciseResultMatched">--</strong>
+          </div>
+          <div class="debug-chip">
+            <span>Mean offset</span>
+            <strong id="exerciseResultMeanOffset">--</strong>
+          </div>
+          <div class="debug-chip">
+            <span>Mean absolute</span>
+            <strong id="exerciseResultMeanAbs">--</strong>
+          </div>
+          <div class="debug-chip">
+            <span>Jitter</span>
+            <strong id="exerciseResultJitter">--</strong>
+          </div>
+        </div>
+        <p class="exercise-result-hint">Click anywhere or press any key to save and close.</p>
+        <div class="exercise-feedback-panel">
+          <h3>Smart feedback</h3>
+          <ul id="exerciseResultFeedbackList"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="repGraphOverlay" class="exercise-result-overlay" hidden>
+      <div class="rep-graph-card panel">
+        <button id="repGraphCloseButton" class="primary-button compact-button result-close-button" type="button">
+          Close
+        </button>
+        <p class="eyebrow">Rep Timing</p>
+        <h2 id="repGraphTitle">Rush / Drag Graph</h2>
+        <canvas id="repGraphCanvas" width="920" height="420"></canvas>
+      </div>
+    </section>
+
+    <section id="exerciseHeatmapOverlay" class="exercise-result-overlay" hidden>
+      <div class="exercise-heatmap-card panel">
+        <button id="exerciseHeatmapCloseButton" class="primary-button compact-button result-close-button" type="button">
+          Close
+        </button>
+        <p class="eyebrow">Historical Performance</p>
+        <h2 id="exerciseHeatmapTitle">Timing Heatmap</h2>
+        <p id="exerciseHeatmapSummary" class="heatmap-summary">
+          Complete reps to build a timing heatmap.
+        </p>
+        <div class="heatmap-legend">
+          <span class="heatmap-legend-chip heatmap-rush">Rushing</span>
+          <span class="heatmap-legend-chip heatmap-centered">Centered</span>
+          <span class="heatmap-legend-chip heatmap-drag">Dragging</span>
+          <span class="heatmap-legend-chip heatmap-missed">Often missed</span>
+        </div>
+        <div class="heatmap-canvas-wrap">
+          <canvas id="exerciseHeatmapCanvas" width="1120" height="520"></canvas>
+        </div>
+        <div id="exerciseHeatmapDetails" class="heatmap-details">
+          Select a marker to inspect a written note.
+        </div>
+      </div>
+    </section>
+
+    <script src="vendor/jszip.min.js"></script>
+    <script src="vendor/opensheetmusicdisplay.min.js"></script>
+    <script type="module" src="main.js?v=20260523-persistence"></script>
+  </body>
+</html>

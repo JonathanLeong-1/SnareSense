@@ -1,0 +1,17 @@
+{
+  "name": "new-project",
+  "version": "1.0.0",
+  "description": "Local macOS-first prototype for real-time marching snare trigger hit detection.",
+  "main": "main.js",
+  "scripts": {
+    "start": "python3 server.py",
+    "test": "node --check main.js && node --check exercise-core.mjs && node --check heatmap-core.mjs && node detector-demo.mjs && node exercise-demo.mjs && node heatmap-demo.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "opensheetmusicdisplay": "^1.9.7"
+  }
+}
