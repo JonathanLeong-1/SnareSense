@@ -69,6 +69,73 @@ function getRecordTargetResults(record, exercise) {
     : getLegacyTargetResults(record, exercise);
 }
 
+function getRecordTimingStats(record, exercise) {
+  const offsetsMs = getRecordTargetResults(record, exercise)
+    .filter((result) => !result.missed && Number.isFinite(Number(result.offsetMs)))
+    .map((result) => -Number(result.offsetMs));
+
+  if (!offsetsMs.length) {
+    return {
+      matchedCount: 0,
+      medianOffsetMs: null,
+      meanOffsetMs: null,
+      sameDirectionRatio: 0,
+    };
+  }
+
+  const medianOffsetMs = median(offsetsMs);
+  const meanOffsetMs = average(offsetsMs);
+  const direction = Math.sign(medianOffsetMs || meanOffsetMs || 0);
+  const sameDirectionCount =
+    direction === 0
+      ? 0
+      : offsetsMs.filter((offset) => Math.sign(offset) === direction).length;
+
+  return {
+    matchedCount: offsetsMs.length,
+    medianOffsetMs,
+    meanOffsetMs,
+    sameDirectionRatio: sameDirectionCount / offsetsMs.length,
+  };
+}
+
+function isWholeRepTimingOutlier(stats, expectedCount) {
+  const minimumMatchedCount = Math.max(4, Math.ceil(expectedCount * 0.4));
+  const medianOffsetMs = Number(stats.medianOffsetMs);
+  const meanOffsetMs = Number(stats.meanOffsetMs);
+  const globalBiasMs = Math.max(Math.abs(medianOffsetMs), Math.abs(meanOffsetMs));
+
+  return (
+    stats.matchedCount >= minimumMatchedCount &&
+    stats.sameDirectionRatio >= 0.8 &&
+    globalBiasMs >= 65
+  );
+}
+
+function filterOutlierRecords(records, exercise) {
+  if (records.length < 3) {
+    return { includedRecords: records, excludedRecords: [] };
+  }
+
+  const expectedCount = Array.isArray(exercise?.expectedHits) ? exercise.expectedHits.length : 0;
+  const annotatedRecords = records.map((record) => ({
+    record,
+    stats: getRecordTimingStats(record, exercise),
+  }));
+  const includedRecords = annotatedRecords
+    .filter(({ stats }) => !isWholeRepTimingOutlier(stats, expectedCount))
+    .map(({ record }) => record);
+  const excludedRecords = annotatedRecords
+    .filter(({ stats }) => isWholeRepTimingOutlier(stats, expectedCount))
+    .map(({ record }) => record);
+
+  if (includedRecords.length === 0) {
+    return { includedRecords: records, excludedRecords: [] };
+  }
+
+  return { includedRecords, excludedRecords };
+}
+
 export function buildTargetTimingResults(analysis) {
   if (!analysis?.matches) {
     return [];
@@ -97,9 +164,10 @@ export function aggregateExerciseHeatmap(exercise, repHistory) {
   const records = Array.isArray(repHistory)
     ? repHistory.filter((record) => record.exerciseId === exercise?.id)
     : [];
+  const { includedRecords, excludedRecords } = filterOutlierRecords(records, exercise);
 
   const resultMap = new Map();
-  for (const record of records) {
+  for (const record of includedRecords) {
     for (const result of getRecordTargetResults(record, exercise)) {
       const targetIndex = Number(result.targetIndex);
       if (!Number.isFinite(targetIndex)) {
@@ -174,7 +242,9 @@ export function aggregateExerciseHeatmap(exercise, repHistory) {
   return {
     exerciseId: exercise?.id ?? null,
     exerciseTitle: exercise?.title ?? "Exercise",
-    repCount: records.length,
+    repCount: includedRecords.length,
+    totalRepCount: records.length,
+    excludedRepCount: excludedRecords.length,
     targets,
     matchedTargetCount: matchedTargets.length,
     overallMeanOffsetMs: average(meanOffsets),

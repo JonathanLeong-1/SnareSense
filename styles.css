@@ -112,7 +112,6 @@ body.app-fullscreen-active {
 body.app-mode-exercise .timeline-workspace,
 body.app-mode-exercise .debug-home-host,
 body.app-mode-exercise .settings-mode-section,
-body:not(.app-mode-exercise) .exercise-hero-panel,
 body.app-mode-settings .timeline-workspace,
 body.app-mode-settings .debug-home-host,
 body.app-mode-settings .exercise-mode-section {
@@ -145,6 +144,51 @@ body.app-mode-settings .settings-mode-section {
   margin: 6px 0 0;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.calibration-page-panel {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 22px;
+  padding: 26px;
+  border-color: rgba(255, 184, 107, 0.2);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(255, 184, 107, 0.16), transparent 34%),
+    linear-gradient(145deg, rgba(10, 24, 28, 0.9), rgba(5, 10, 17, 0.92));
+}
+
+.calibration-page-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(135deg, rgba(0, 0, 0, 0.45), transparent 62%);
+}
+
+.calibration-page-panel > * {
+  position: relative;
+}
+
+.calibration-page-header {
+  max-width: 820px;
+}
+
+.calibration-page-header h2 {
+  margin: 0;
+  font-size: clamp(1.8rem, 3.2vw, 3rem);
+  letter-spacing: -0.04em;
+  text-transform: none;
+}
+
+.calibration-page-header .calibration-instructions {
+  margin-top: 10px;
+  max-width: 720px;
+  font-size: 1rem;
 }
 
 .transport-strip {
@@ -349,16 +393,16 @@ body.app-mode-settings .settings-mode-section {
 }
 
 .exercise-guide-button {
-  min-width: 0;
-  width: min(100%, 260px);
-  margin: 10px auto 0;
-  border-color: rgba(115, 224, 169, 0.42);
-  box-shadow: inset 0 0 0 1px rgba(115, 224, 169, 0.08);
+  min-height: 34px;
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  border-color: rgba(255, 184, 107, 0.34);
+  color: rgba(243, 247, 251, 0.92);
 }
 
 .exercise-guide-button.is-active {
-  border-color: rgba(115, 224, 169, 0.58);
-  box-shadow: inset 0 0 0 1px rgba(115, 224, 169, 0.12);
+  border-color: rgba(255, 184, 107, 0.58);
+  box-shadow: inset 0 0 0 1px rgba(255, 184, 107, 0.12);
 }
 
 .exercise-metronome-host .fullscreen-drawer-toggle {
@@ -614,7 +658,60 @@ output {
 
 .calibration-panel {
   display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr);
+  align-items: stretch;
+}
+
+.calibration-left-stack {
+  display: grid;
   gap: 14px;
+  align-content: start;
+}
+
+.calibration-manual-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.calibration-page-panel .control,
+.calibration-page-panel .calibration-chip {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.075);
+}
+
+.calibration-page-panel .control {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.028)),
+    rgba(255, 255, 255, 0.035);
+}
+
+.calibration-manual-grid .control-title span,
+.calibration-manual-grid output {
+  color: #ffffff;
+}
+
+.calibration-manual-grid .control-title span {
+  font-weight: 400;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.visually-hidden[hidden] {
+  display: none !important;
 }
 
 .calibration-screen-audio-control {
@@ -680,6 +777,149 @@ output {
 .calibration-actions {
   grid-template-columns: repeat(auto-fit, minmax(150px, max-content));
   align-items: center;
+}
+
+.calibration-secondary-actions {
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+}
+
+.calibration-start-zone {
+  min-height: 100%;
+  display: grid;
+  gap: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 10px;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(115, 224, 169, 0.22), transparent 42%),
+    linear-gradient(145deg, rgba(115, 224, 169, 0.08), rgba(138, 232, 243, 0.07));
+  border: 1px solid rgba(168, 242, 205, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.calibration-source-gate {
+  min-height: 100%;
+}
+
+.calibration-source-gate {
+  display: grid;
+  align-content: center;
+  gap: 16px;
+  padding: 34px;
+  text-align: center;
+}
+
+.calibration-source-gate h3 {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 3.8rem);
+  line-height: 0.96;
+  letter-spacing: -0.055em;
+}
+
+.calibration-source-gate p:not(.eyebrow) {
+  margin: 0 auto;
+  max-width: 30ch;
+  color: rgba(243, 247, 251, 0.72);
+  line-height: 1.45;
+}
+
+.calibration-source-warning {
+  width: fit-content;
+  max-width: min(100%, 680px) !important;
+  padding: 12px 15px;
+  border: 1px solid rgba(255, 184, 107, 0.24);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(255, 184, 107, 0.13), rgba(115, 224, 169, 0.07)),
+    rgba(255, 255, 255, 0.035);
+  color: rgba(255, 248, 232, 0.94);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.calibration-source-control {
+  margin-top: 8px;
+  text-align: left;
+}
+
+.calibration-source-gate[hidden] {
+  display: none !important;
+}
+
+.calibration-screen-source-panel {
+  min-height: 360px;
+  border-radius: 24px;
+  border: 1px solid rgba(168, 242, 205, 0.18);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(115, 224, 169, 0.18), transparent 46%),
+    linear-gradient(145deg, rgba(115, 224, 169, 0.08), rgba(138, 232, 243, 0.07));
+}
+
+.calibration-screen-source-panel #calibrationScreenStartButton {
+  width: min(100%, 360px);
+  justify-self: center;
+  min-height: 60px;
+  border-radius: 999px;
+  margin-top: 4px;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    filter 160ms ease;
+}
+
+.calibration-screen-source-panel #calibrationScreenStartButton:disabled {
+  opacity: 0.34;
+  filter: grayscale(0.8);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.calibration-stage-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.calibration-stage-card strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 1.02rem;
+}
+
+.calibration-start-zone #startCalibrationButton {
+  min-height: 360px;
+  width: 100%;
+  height: 100%;
+  border-radius: 22px;
+  padding: 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 28px 70px rgba(115, 224, 169, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.16) inset;
+}
+
+.calibration-start-title {
+  display: block;
+  max-width: 8ch;
+  font-size: clamp(1.8rem, 4.1vw, 3.9rem);
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+}
+
+.calibration-start-subtitle {
+  display: block;
+  max-width: 24ch;
+  color: rgba(6, 32, 24, 0.74);
+  font-size: clamp(0.92rem, 1.35vw, 1.08rem);
+  font-weight: 700;
+  line-height: 1.28;
+  letter-spacing: 0;
 }
 
 .calibration-trim-row {
@@ -762,24 +1002,37 @@ output {
 .calibration-screen-body {
   display: grid;
   gap: 24px;
-  grid-template-columns: minmax(320px, 1.1fr) minmax(280px, 0.9fr);
+  grid-template-columns: minmax(320px, 1fr);
   align-items: center;
 }
 
+.calibration-screen-body[hidden] {
+  display: none !important;
+}
+
+.calibration-screen-body.has-results {
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+}
+
 .calibration-progress-card {
-  min-height: 420px;
+  min-height: 510px;
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(168, 242, 205, 0.18);
   background:
-    radial-gradient(circle at top, rgba(136, 214, 255, 0.11), transparent 48%),
+    radial-gradient(circle at 50% 0%, rgba(115, 224, 169, 0.2), transparent 44%),
+    radial-gradient(circle at 78% 20%, rgba(138, 232, 243, 0.13), transparent 36%),
+    linear-gradient(145deg, rgba(115, 224, 169, 0.08), rgba(138, 232, 243, 0.07)),
     rgba(255, 255, 255, 0.035);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 22px 64px rgba(5, 18, 16, 0.2);
   display: grid;
   place-items: center;
 }
 
 .calibration-progress-wrap {
   position: relative;
-  width: min(100%, 360px);
+  width: min(100%, 448px);
   aspect-ratio: 1;
 }
 
@@ -792,7 +1045,7 @@ output {
 .calibration-progress-track,
 .calibration-progress-ring {
   fill: none;
-  stroke-width: 14;
+  stroke-width: 22;
 }
 
 .calibration-progress-track {
@@ -818,8 +1071,8 @@ output {
   place-items: center;
   align-content: center;
   text-align: center;
-  gap: 6px;
-  padding: 28px;
+  gap: 8px;
+  padding: 78px;
 }
 
 .calibration-progress-label,
@@ -834,8 +1087,26 @@ output {
 }
 
 .calibration-progress-center strong {
-  font-size: clamp(2rem, 4vw, 3.2rem);
+  max-width: 13.8ch;
+  font-size: clamp(1.5rem, 2.9vw, 2.36rem);
+  line-height: 1;
   font-variant-numeric: tabular-nums;
+  text-wrap: balance;
+}
+
+.calibration-progress-segment {
+  position: absolute;
+  top: 34px;
+  right: 38px;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(7, 11, 14, 0.46);
+  color: rgba(243, 247, 251, 0.8);
+  font-size: 0.78rem;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(10px);
 }
 
 #autoTuneProgressValue {
@@ -846,12 +1117,23 @@ output {
 }
 
 .calibration-progress-phase {
-  font-size: 0.98rem;
+  max-width: 22ch;
+  font-size: clamp(0.92rem, 1.55vw, 1.12rem);
+  line-height: 1.24;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  text-wrap: balance;
 }
 
 .calibration-screen-side {
   display: grid;
   gap: 18px;
+}
+
+.calibration-screen-side[hidden],
+.calibration-debug-panel[hidden] {
+  display: none !important;
 }
 
 .calibration-screen-stage {
@@ -1683,10 +1965,15 @@ details[open] > .collapsible-summary::after {
 .exercise-sheet-panel,
 .exercise-results-panel,
 .exercise-timeline-panel,
-.exercise-offset-panel {
+.exercise-offset-panel,
+.exercise-dynamics-panel {
   padding: 20px 22px;
   display: flex;
   flex-direction: column;
+}
+
+.exercise-dynamics-panel {
+  grid-column: 1 / -1;
 }
 
 .session-history-panel,
@@ -1764,7 +2051,8 @@ details[open] > .collapsible-summary::after {
 }
 
 .exercise-timeline-panel:has(.exercise-collapse-body[hidden]),
-.exercise-offset-panel:has(.exercise-collapse-body[hidden]) {
+.exercise-offset-panel:has(.exercise-collapse-body[hidden]),
+.exercise-dynamics-panel:has(.exercise-collapse-body[hidden]) {
   min-height: 0;
 }
 
@@ -1797,12 +2085,33 @@ details[open] > .collapsible-summary::after {
   padding: 14px;
 }
 
+.sheet-tendency-graph-layer,
+.sheet-dynamics-graph-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
 .sheet-music-container svg {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100% !important;
   height: auto !important;
   min-height: 280px;
-  background: #ffffff;
+  background: transparent !important;
+}
+
+.sheet-music-container .sheet-tendency-graph-layer,
+.sheet-music-container .sheet-dynamics-graph-layer {
+  position: absolute;
+  z-index: 0;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0;
 }
 
 .sheet-music-container img[id*="cursor"],
@@ -1869,12 +2178,18 @@ details[open] > .collapsible-summary::after {
   color: #062332;
 }
 
-.exercise-heatmap-button {
+.exercise-tendencies-button,
+.view-tendencies-button {
   min-height: 34px;
   padding: 7px 14px;
   font-size: 0.82rem;
   border-color: rgba(255, 184, 107, 0.34);
   color: rgba(243, 247, 251, 0.92);
+}
+
+.exercise-tendencies-button.is-active {
+  border-color: rgba(255, 184, 107, 0.58);
+  box-shadow: inset 0 0 0 1px rgba(255, 184, 107, 0.12);
 }
 
 .sheet-music-container svg path,
@@ -1973,6 +2288,15 @@ details[open] > .collapsible-summary::after {
   min-height: 380px;
 }
 
+#exerciseDynamicsCanvas {
+  flex: 1 1 auto;
+  display: block;
+  max-width: 100%;
+  margin-inline: auto;
+  box-sizing: border-box;
+  min-height: 300px;
+}
+
 .session-history-list,
 .exercise-stats-list {
   display: grid;
@@ -1982,13 +2306,25 @@ details[open] > .collapsible-summary::after {
 .session-history-item,
 .exercise-stat-card {
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) 90px 120px 130px 180px;
   gap: 12px;
   align-items: center;
   padding: 12px 14px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.045);
   border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.session-history-item {
+  grid-template-columns: minmax(170px, 1fr) 90px 120px 130px minmax(180px, 360px);
+}
+
+.exercise-stat-card {
+  grid-template-columns: minmax(190px, 1fr) 90px 120px 150px 160px;
+}
+
+.view-tendencies-button {
+  justify-self: end;
+  min-width: 150px;
 }
 
 .session-history-item.is-best {
@@ -2014,10 +2350,17 @@ details[open] > .collapsible-summary::after {
   font-size: 0.84rem;
 }
 
-.mini-offset-graph {
+.mini-rep-graphs {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mini-rep-graph {
   display: grid;
   place-items: center;
-  justify-self: center;
+  flex: 0 1 170px;
   width: 170px;
   height: 58px;
   padding: 0;
@@ -2029,7 +2372,18 @@ details[open] > .collapsible-summary::after {
   overflow: hidden;
 }
 
-.mini-offset-graph svg {
+.mini-rep-graph:hover {
+  border-color: rgba(255, 184, 107, 0.34);
+  background: rgba(3, 10, 16, 0.58);
+}
+
+.mini-dynamics-graph {
+  border-color: rgba(255, 184, 107, 0.16);
+  background:
+    linear-gradient(135deg, rgba(255, 184, 107, 0.10), rgba(3, 10, 16, 0.38));
+}
+
+.mini-rep-graph svg {
   display: block;
   margin: auto;
 }
@@ -2121,12 +2475,6 @@ body.app-mode-stats .metronome-panel {
   min-height: 360px;
 }
 
-#exerciseHeatmapCanvas {
-  display: block;
-  width: 100%;
-  min-height: 440px;
-}
-
 .heatmap-summary {
   max-width: 820px;
   color: var(--muted);
@@ -2171,18 +2519,107 @@ body.app-mode-stats .metronome-panel {
   background: #8ac7ff;
 }
 
-.heatmap-missed::before {
-  background: #ffe696;
-}
-
-.heatmap-canvas-wrap {
+.heatmap-sheet-wrap {
   overflow-x: auto;
   border-radius: 20px;
-  padding: 14px;
+  padding: 16px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
-    rgba(3, 10, 15, 0.24);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.025)),
+    rgba(3, 10, 15, 0.28);
   border: 1px solid rgba(136, 214, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.heatmap-sheet-stage {
+  position: relative;
+  min-width: 760px;
+  margin: 0 auto;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(6, 19, 29, 0.12);
+}
+
+.heatmap-sheet-clone {
+  position: relative;
+  z-index: 2;
+  padding: 14px;
+  pointer-events: none;
+}
+
+.heatmap-sheet-clone svg {
+  display: block;
+  background: transparent !important;
+}
+
+.heatmap-empty-sheet {
+  display: grid;
+  place-items: center;
+  min-height: 360px;
+  color: rgba(6, 19, 29, 0.66);
+  font-weight: 800;
+}
+
+.heatmap-graph-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.heatmap-trace-segment {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5.5;
+  stroke-opacity: 0.38;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.34));
+}
+
+.dynamics-trace-segment {
+  fill: none;
+  stroke: rgba(115, 224, 169, 0.42);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5;
+  filter: drop-shadow(0 1px 1px rgba(5, 28, 20, 0.16));
+}
+
+.dynamics-trace-point {
+  fill: rgba(115, 224, 169, 0.58);
+  stroke: rgba(5, 28, 20, 0.18);
+  stroke-width: 0.9;
+}
+
+.heatmap-marker-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+.heatmap-trace-hit-target {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.heatmap-trace-hit-target:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 2px solid rgba(6, 19, 29, 0.52);
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.72);
 }
 
 .heatmap-details {
@@ -2318,6 +2755,8 @@ body.app-mode-stats .metronome-panel {
 @media (max-width: 1180px) {
   .timeline-layout,
   .drawer-grid,
+  .calibration-panel,
+  .calibration-manual-grid,
   .exercise-grid,
   .exercise-review-grid,
   .stats-grid,
@@ -2327,9 +2766,21 @@ body.app-mode-stats .metronome-panel {
     display: grid;
   }
 
+  .calibration-start-zone #startCalibrationButton {
+    min-height: 180px;
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+  }
+
   .exercise-control-strip {
     overflow-x: auto;
     padding-bottom: 6px;
+  }
+
+  .mini-rep-graphs {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .exercise-hero-panel {

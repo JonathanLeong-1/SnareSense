@@ -31,6 +31,14 @@ const secondAnalysis = {
   ],
 };
 
+const globallyDraggingAnalysis = {
+  matches: exercise.expectedHits.map((expected) => ({
+    expected,
+    offsetMs: 95,
+    status: "late",
+  })),
+};
+
 const repHistory = [
   {
     exerciseId: exercise.id,
@@ -40,12 +48,17 @@ const repHistory = [
     exerciseId: exercise.id,
     targetResults: buildTargetTimingResults(secondAnalysis),
   },
+  {
+    exerciseId: exercise.id,
+    targetResults: buildTargetTimingResults(globallyDraggingAnalysis),
+  },
 ];
 
 const heatmap = aggregateExerciseHeatmap(exercise, repHistory);
 
 console.log("Heatmap demo");
-console.log(`Reps       : ${heatmap.repCount}`);
+console.log(`Reps used  : ${heatmap.repCount}/${heatmap.totalRepCount}`);
+console.log(`Outliers   : ${heatmap.excludedRepCount}`);
 console.log(`Target 1   : ${heatmap.targets[0].tendency} ${heatmap.targets[0].meanOffsetMs.toFixed(1)} ms`);
 console.log(`Target 3   : ${heatmap.targets[2].tendency} ${heatmap.targets[2].meanOffsetMs.toFixed(1)} ms`);
 console.log(`Target 4 misses: ${heatmap.targets[3].missedCount}/${heatmap.targets[3].totalCount}`);
@@ -60,4 +73,8 @@ if (heatmap.targets[2].tendency !== "drag") {
 
 if (heatmap.targets[3].missedCount !== 1 || heatmap.targets[3].matchedCount !== 1) {
   throw new Error("Expected missed notes to be tracked without breaking later targets.");
+}
+
+if (heatmap.excludedRepCount !== 1) {
+  throw new Error("Expected globally biased reps to be excluded from historical heatmap averages.");
 }

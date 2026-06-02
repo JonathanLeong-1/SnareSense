@@ -42,8 +42,117 @@ const CALIBRATION_MATCH_WINDOW_MS = 160;
 const CALIBRATION_MIN_USABLE_HITS = 8;
 const CALIBRATION_OVERLAY_CLOSE_MS = 190;
 const CALIBRATION_TAP_OFF_PATTERN = [2, 1, 1, 1, 2, 1, 1, 1, 2, 1, 2, 1, 2, 2, 2, null];
+const TRIPLET_TAP_OFF_EXERCISE_IDS = new Set(["triplet-rolls", "triplet-grid", "pats"]);
+const TRIPLET_TAP_OFF_PATTERN = [
+  2, 1, 1, 1, 1, 1,
+  2, 1, 1, 1, 1, 1,
+  2, 1, 1,
+  2, 1, 1,
+  2, 2, 2, 2,
+  null, null,
+];
 const CALIBRATION_OFFSET_SEARCH_MIN_MS = -40;
 const CALIBRATION_OFFSET_SEARCH_MAX_MS = 220;
+const MODE_INFO_COPY = {
+  settings: {
+    eyebrow: "Calibration",
+    title: "Calibrate your input before reps",
+    copy: "Tune timing, dynamics, noise floor, and fast-stroke detection from one guided test.",
+  },
+  live: {
+    eyebrow: "Live Timeline",
+    title: "Monitor clicks and detected hits",
+    copy: "Watch incoming audio, metronome timing, and detector response in real time.",
+  },
+  exercise: {
+    eyebrow: "Exercise Analysis",
+    title: "Written snare reps with timing feedback",
+    copy: "Load an exercise, play the rep, then review rushing, dragging, and dynamics.",
+  },
+  stats: {
+    eyebrow: "Stats",
+    title: "Track progress across sessions",
+    copy: "Review lifetime totals, exercise rankings, tendencies, and locally saved history.",
+  },
+};
+const SINGLE_CALIBRATION_PHASES = [
+  {
+    id: "noise",
+    label: "Silent tap-off",
+    circleText: "Get ready to play 3 inch eighths",
+    instruction: "Stay silent through the tap-off. This measures the room and trigger noise floor.",
+    bars: 2,
+    metronome: "tap-off",
+    collectNoise: true,
+  },
+  {
+    id: "height-3",
+    label: "3 inch eighths",
+    circleText: "Play 3 inch eighths",
+    instruction: "Play steady eighth notes from a 3 inch stick height with the metronome.",
+    bars: 2,
+    metronome: "eighths",
+    dynamicLevel: "3in",
+    targetHeightInches: 3,
+  },
+  {
+    id: "height-6",
+    label: "6 inch eighths",
+    circleText: "Play 6 inch eighths",
+    instruction: "Keep the same eighth-note timing, now from a 6 inch stick height.",
+    bars: 2,
+    metronome: "eighths",
+    dynamicLevel: "6in",
+    targetHeightInches: 6,
+  },
+  {
+    id: "height-9",
+    label: "9 inch eighths",
+    circleText: "Play 9 inch eighths",
+    instruction: "Keep the same eighth-note timing, now from a 9 inch stick height.",
+    bars: 2,
+    metronome: "eighths",
+    dynamicLevel: "9in",
+    targetHeightInches: 9,
+  },
+  {
+    id: "height-12",
+    label: "12 inch eighths",
+    circleText: "Play 12 inch eighths",
+    instruction: "Keep playing eighth notes, now from a 12 inch stick height for your loud range.",
+    bars: 2,
+    metronome: "eighths",
+    dynamicLevel: "12in",
+    targetHeightInches: 12,
+  },
+  {
+    id: "roll-prep",
+    label: "Roll prep",
+    circleText: "Get ready to play a quiet double-stroke roll",
+    instruction: "Stay silent and get ready to play a quiet double-stroke roll, out of time.",
+    durationSeconds: 3,
+    metronome: "off",
+    collectNoise: true,
+  },
+  {
+    id: "fast-soft",
+    label: "Minimum-volume roll",
+    circleText: "Very quiet double-stroke roll",
+    instruction: "Metronome off: play a very quiet double-stroke roll, out of time.",
+    durationSeconds: 4,
+    metronome: "off",
+    dynamicLevel: "fastSoft",
+  },
+  {
+    id: "fast-loud",
+    label: "Full-volume speed",
+    circleText: "Play fast at full volume",
+    instruction: "Metronome off: play fast at full volume with clean separation.",
+    durationSeconds: 4,
+    metronome: "off",
+    dynamicLevel: "fastLoud",
+  },
+];
 const AUTO_DETECTION_PHASES = [
   {
     id: "noise",
@@ -70,6 +179,7 @@ const AUTO_DETECTION_PHASES = [
 const AUTO_DETECTION_MIN_SOFT_HITS = 5;
 const EXERCISE_TIMELINE_HEIGHT = 380;
 const EXERCISE_OFFSET_GRAPH_HEIGHT = 380;
+const EXERCISE_DYNAMICS_GRAPH_HEIGHT = 300;
 const EXERCISE_START_DELAY_SECONDS = 0.6;
 const EXERCISE_LISTEN_START_DELAY_SECONDS = 0.25;
 const EXERCISE_GUIDE_LOOKAHEAD_SECONDS = 0.2;
@@ -110,6 +220,8 @@ const elements = {
   metronomeTempoInput: document.getElementById("metronomeTempoInput"),
   metronomeTempoNumber: document.getElementById("metronomeTempoNumber"),
   metronomeTempoValue: document.getElementById("metronomeTempoValue"),
+  metronomeVolumeInput: document.getElementById("metronomeVolumeInput"),
+  metronomeVolumeValue: document.getElementById("metronomeVolumeValue"),
   metronomeSubdivisionSelect: document.getElementById("metronomeSubdivisionSelect"),
   metronomeSubdivisionValue: document.getElementById("metronomeSubdivisionValue"),
   metronomeNumeratorInput: document.getElementById("metronomeNumeratorInput"),
@@ -121,6 +233,7 @@ const elements = {
   thresholdInput: document.getElementById("thresholdInput"),
   refractoryInput: document.getElementById("refractoryInput"),
   smoothingInput: document.getElementById("smoothingInput"),
+  calibrationSourceGate: document.getElementById("calibrationSourceGate"),
   thresholdValue: document.getElementById("thresholdValue"),
   refractoryValue: document.getElementById("refractoryValue"),
   smoothingValue: document.getElementById("smoothingValue"),
@@ -155,6 +268,7 @@ const elements = {
   exerciseMetronomeHost: document.getElementById("exerciseMetronomeHost"),
   exerciseGuideEnabledInput: document.getElementById("exerciseGuideEnabledInput"),
   exerciseGuideToggleButton: document.getElementById("exerciseGuideToggleButton"),
+  exerciseDynamicsToggleButton: document.getElementById("exerciseDynamicsToggleButton"),
   debugHomeHost: document.getElementById("debugHomeHost"),
   debugPanel: document.getElementById("debugPanel"),
   settingsDebugPanel: document.getElementById("settingsDebugPanel"),
@@ -179,6 +293,7 @@ const elements = {
   resetDetectionDefaultsButton: document.getElementById("resetDetectionDefaultsButton"),
   latencyCompensationValue: document.getElementById("latencyCompensationValue"),
   calibrationStatusValue: document.getElementById("calibrationStatusValue"),
+  calibrationPanelStageValue: document.getElementById("calibrationPanelStageValue"),
   calibrationInstructionText: document.getElementById("calibrationInstructionText"),
   calibrationOffsetValue: document.getElementById("calibrationOffsetValue"),
   calibrationUsableHitsValue: document.getElementById("calibrationUsableHitsValue"),
@@ -197,15 +312,17 @@ const elements = {
   autoTuneRefractoryValue: document.getElementById("autoTuneRefractoryValue"),
   autoTuneSmoothingValue: document.getElementById("autoTuneSmoothingValue"),
   calibrationOverlay: document.getElementById("calibrationOverlay"),
+  calibrationScreen: document.getElementById("calibrationScreen"),
+  calibrationScreenBody: document.getElementById("calibrationScreenBody"),
+  calibrationScreenSide: document.getElementById("calibrationScreenSide"),
   calibrationScreenBackButton: document.getElementById("calibrationScreenBackButton"),
   calibrationScreenInstructionText: document.getElementById("calibrationScreenInstructionText"),
-  calibrationScreenStatusValue: document.getElementById("calibrationScreenStatusValue"),
   calibrationScreenStartButton: document.getElementById("calibrationScreenStartButton"),
-  calibrationScreenIdleActions: document.getElementById("calibrationScreenIdleActions"),
   calibrationScreenResults: document.getElementById("calibrationScreenResults"),
   calibrationProgressRing: document.getElementById("calibrationProgressRing"),
   calibrationProgressValue: document.getElementById("calibrationProgressValue"),
   calibrationPhaseValue: document.getElementById("calibrationPhaseValue"),
+  calibrationSegmentValue: document.getElementById("calibrationSegmentValue"),
   autoTuneOverlay: document.getElementById("autoTuneOverlay"),
   autoTuneScreenStartButton: document.getElementById("autoTuneScreenStartButton"),
   autoTuneScreenIdleActions: document.getElementById("autoTuneScreenIdleActions"),
@@ -216,6 +333,9 @@ const elements = {
   exerciseModeButton: document.getElementById("exerciseModeButton"),
   settingsModeButton: document.getElementById("settingsModeButton"),
   statsModeButton: document.getElementById("statsModeButton"),
+  modeInfoEyebrow: document.getElementById("modeInfoEyebrow"),
+  modeInfoTitle: document.getElementById("modeInfoTitle"),
+  modeInfoCopy: document.getElementById("modeInfoCopy"),
   exerciseModeSection: document.getElementById("exerciseModeSection"),
   settingsModeSection: document.getElementById("settingsModeSection"),
   statsModeSection: document.getElementById("statsModeSection"),
@@ -228,7 +348,6 @@ const elements = {
   exerciseStopButton: document.getElementById("exerciseStopButton"),
   exerciseTitle: document.getElementById("exerciseTitle"),
   exerciseMetadata: document.getElementById("exerciseMetadata"),
-  exercisePartValue: document.getElementById("exercisePartValue"),
   exerciseHitTargetValue: document.getElementById("exerciseHitTargetValue"),
   exerciseDurationValue: document.getElementById("exerciseDurationValue"),
   sheetMusicContainer: document.getElementById("sheetMusicContainer"),
@@ -244,6 +363,9 @@ const elements = {
   exerciseOffsetPanel: document.getElementById("exerciseOffsetPanel"),
   exerciseOffsetBody: document.getElementById("exerciseOffsetBody"),
   exerciseOffsetCanvas: document.getElementById("exerciseOffsetCanvas"),
+  exerciseDynamicsPanel: document.getElementById("exerciseDynamicsPanel"),
+  exerciseDynamicsBody: document.getElementById("exerciseDynamicsBody"),
+  exerciseDynamicsCanvas: document.getElementById("exerciseDynamicsCanvas"),
   exerciseResultOverlay: document.getElementById("exerciseResultOverlay"),
   exerciseResultCloseButton: document.getElementById("exerciseResultCloseButton"),
   exerciseResultTitle: document.getElementById("exerciseResultTitle"),
@@ -253,12 +375,15 @@ const elements = {
   exerciseResultMeanAbs: document.getElementById("exerciseResultMeanAbs"),
   exerciseResultJitter: document.getElementById("exerciseResultJitter"),
   exerciseResultFeedbackList: document.getElementById("exerciseResultFeedbackList"),
-  exerciseHeatmapButton: document.getElementById("exerciseHeatmapButton"),
+  exerciseTendenciesButton: document.getElementById("exerciseTendenciesButton"),
   exerciseHeatmapOverlay: document.getElementById("exerciseHeatmapOverlay"),
   exerciseHeatmapCloseButton: document.getElementById("exerciseHeatmapCloseButton"),
   exerciseHeatmapTitle: document.getElementById("exerciseHeatmapTitle"),
   exerciseHeatmapSummary: document.getElementById("exerciseHeatmapSummary"),
-  exerciseHeatmapCanvas: document.getElementById("exerciseHeatmapCanvas"),
+  exerciseHeatmapSheetStage: document.getElementById("exerciseHeatmapSheetStage"),
+  exerciseHeatmapGraphLayer: document.getElementById("exerciseHeatmapGraphLayer"),
+  exerciseHeatmapSheetClone: document.getElementById("exerciseHeatmapSheetClone"),
+  exerciseHeatmapMarkerLayer: document.getElementById("exerciseHeatmapMarkerLayer"),
   exerciseHeatmapDetails: document.getElementById("exerciseHeatmapDetails"),
   autoTuneDebugPanel: document.getElementById("autoTuneDebugPanel"),
   autoTuneDebugCanvas: document.getElementById("autoTuneDebugCanvas"),
@@ -310,6 +435,7 @@ const state = {
   metronomeElapsedBaseSeconds: 0,
   metronomeAccentLevels: [],
   metronomeFlashTimeout: null,
+  metronomeFlashVersion: 0,
   hitIndicatorTimeout: null,
   animationFrameId: 0,
   timelineFollowLive: true,
@@ -317,6 +443,7 @@ const state = {
   tempoSegments: [],
   metronomeResyncVersion: 0,
   latencyCompensationMs: 0,
+  dynamicCalibration: null,
   calibration: {
     token: 0,
     overlayOpen: false,
@@ -325,7 +452,7 @@ const state = {
     finishing: false,
     statusText: "Ready",
     instructions:
-      "Press start calibration to run the guided latency check with the selected audio source.",
+      "Press Start Calibration to choose an audio source and begin.",
     savedSettings: null,
     startHitIndex: 0,
     firstClickTimeSeconds: null,
@@ -333,9 +460,12 @@ const state = {
     collectEndTimeSeconds: null,
     progressStartTimeSeconds: null,
     progressEndTimeSeconds: null,
+    phases: [],
+    phaseSamples: null,
     targetTimesSeconds: [],
     pendingResult: null,
     startedCaptureForCalibration: false,
+    overlaySourceSelected: false,
   },
   autoDetection: {
     token: 0,
@@ -423,6 +553,7 @@ const state = {
     guideNextIndex: 0,
     guideTimer: null,
     guideToken: 0,
+    guideAudioStartTime: null,
     listening: false,
     listenEvents: [],
     listenNextIndex: 0,
@@ -436,6 +567,11 @@ const state = {
     latestScoreRecord: null,
     pendingScoreRecord: null,
     pendingScoreAnalysis: null,
+    tendenciesVisible: false,
+    dynamicsVisible: false,
+    offscreenRenderActive: false,
+    offscreenRenderPreviousHidden: true,
+    offscreenRenderPreviousStyle: "",
     resultOverlayOpen: false,
     highScores: [],
     repHistory: [],
@@ -448,6 +584,7 @@ const state = {
     totalCalibrationsCompleted: 0,
   },
   activeRepGraphRecord: null,
+  activeRepGraphType: "offset",
   activeHeatmap: null,
   suppressTimelineScrollEvent: false,
 };
@@ -576,6 +713,8 @@ function getPersistableDetectionSettings() {
     refractoryMs: Number(elements.refractoryInput.value),
     smoothing: Number(elements.smoothingInput.value),
     latencyCompensationMs: state.latencyCompensationMs,
+    metronomeVolume: Number(elements.metronomeVolumeInput.value),
+    dynamicCalibration: state.dynamicCalibration,
   };
 }
 
@@ -598,9 +737,16 @@ function loadDetectionSettings() {
   setRangeValueFromSaved(elements.thresholdInput, parsed.threshold);
   setRangeValueFromSaved(elements.refractoryInput, parsed.refractoryMs);
   setRangeValueFromSaved(elements.smoothingInput, parsed.smoothing);
+  setRangeValueFromSaved(elements.metronomeVolumeInput, parsed.metronomeVolume);
   if (Number.isFinite(Number(parsed.latencyCompensationMs))) {
     state.latencyCompensationMs = Number(Number(parsed.latencyCompensationMs).toFixed(3));
   }
+  state.dynamicCalibration =
+    parsed.dynamicCalibration &&
+    typeof parsed.dynamicCalibration === "object" &&
+    !Array.isArray(parsed.dynamicCalibration)
+      ? parsed.dynamicCalibration
+      : null;
 }
 
 function saveDetectionSettings() {
@@ -668,6 +814,12 @@ function resetCalibrationOverlayAnimation() {
 
 function openCalibrationOverlay() {
   resetCalibrationOverlayAnimation();
+  if (!state.calibration.active && !state.calibration.pendingResult) {
+    state.calibration.overlaySourceSelected = false;
+    if (Array.from(elements.calibrationDeviceSelect.options).some((option) => option.value === "")) {
+      elements.calibrationDeviceSelect.value = "";
+    }
+  }
   state.calibration.overlayOpen = true;
   elements.calibrationOverlay.hidden = false;
   elements.calibrationOverlay.classList.remove("is-closing");
@@ -733,52 +885,23 @@ function getCalibrationProgressFraction() {
     return 1;
   }
 
-  if (
-    !calibration.active ||
-    !Number.isFinite(calibration.progressStartTimeSeconds) ||
-    !Number.isFinite(calibration.progressEndTimeSeconds)
-  ) {
-    return 0;
-  }
-
-  const duration = calibration.progressEndTimeSeconds - calibration.progressStartTimeSeconds;
-  if (duration <= 0) {
+  if (!calibration.active || calibration.phases.length === 0) {
     return 0;
   }
 
   const currentElapsed = getCurrentSessionElapsedSeconds();
-  const tapOffEndTimeSeconds = calibration.collectStartTimeSeconds;
-
-  if (
-    Number.isFinite(tapOffEndTimeSeconds) &&
-    tapOffEndTimeSeconds > calibration.progressStartTimeSeconds &&
-    currentElapsed < tapOffEndTimeSeconds
-  ) {
-    return clamp(
-      (currentElapsed - calibration.progressStartTimeSeconds) /
-        (tapOffEndTimeSeconds - calibration.progressStartTimeSeconds),
-      0,
-      1
-    );
+  const phase = getCurrentCalibrationPhaseAtTime(currentElapsed);
+  if (!phase) {
+    const finalPhase = calibration.phases[calibration.phases.length - 1];
+    return finalPhase && currentElapsed >= finalPhase.endTimeSeconds ? 1 : 0;
   }
 
-  if (
-    Number.isFinite(tapOffEndTimeSeconds) &&
-    calibration.progressEndTimeSeconds > tapOffEndTimeSeconds
-  ) {
-    return clamp(
-      (currentElapsed - tapOffEndTimeSeconds) /
-        (calibration.progressEndTimeSeconds - tapOffEndTimeSeconds),
-      0,
-      1
-    );
+  const phaseDuration = phase.endTimeSeconds - phase.startTimeSeconds;
+  if (phaseDuration <= 0) {
+    return 0;
   }
 
-  return clamp(
-    (currentElapsed - calibration.progressStartTimeSeconds) / duration,
-    0,
-    1
-  );
+  return clamp((currentElapsed - phase.startTimeSeconds) / phaseDuration, 0, 1);
 }
 
 function getAudioContextClass() {
@@ -799,6 +922,10 @@ function getMetronomeTempo() {
     METRONOME_MIN_TEMPO,
     METRONOME_MAX_TEMPO
   );
+}
+
+function getMetronomeVolume() {
+  return clamp(Number(elements.metronomeVolumeInput?.value) || 0, 0, 100) / 100;
 }
 
 function getSubdivisionConfig() {
@@ -1335,6 +1462,7 @@ function updateControlLabels() {
   elements.thresholdValue.textContent = Number(elements.thresholdInput.value).toFixed(3);
   elements.refractoryValue.textContent = `${Number(elements.refractoryInput.value)} ms`;
   elements.smoothingValue.textContent = Number(elements.smoothingInput.value).toFixed(2);
+  elements.metronomeVolumeValue.textContent = `${Math.round(getMetronomeVolume() * 100)}%`;
   syncTempoInputs(getMetronomeTempo());
   elements.metronomeSubdivisionValue.textContent = getSubdivisionConfig().label;
   elements.metronomeTimeSignatureValue.textContent = `${getTimeSignature().numerator}/${getTimeSignature().denominator}`;
@@ -1406,12 +1534,27 @@ function flashHitIndicator() {
   }, 100);
 }
 
+function resetMetronomeIndicatorFlash() {
+  state.metronomeFlashVersion += 1;
+  window.clearTimeout(state.metronomeFlashTimeout);
+  state.metronomeFlashTimeout = null;
+  elements.metronomeIndicator.classList.remove("active");
+}
+
 function flashMetronomeIndicator(delayMs = 0) {
   const safeDelay = Math.max(0, delayMs);
+  const flashVersion = state.metronomeFlashVersion;
   window.setTimeout(() => {
+    if (flashVersion !== state.metronomeFlashVersion || !state.metronomeRunning) {
+      return;
+    }
+
     elements.metronomeIndicator.classList.add("active");
     window.clearTimeout(state.metronomeFlashTimeout);
     state.metronomeFlashTimeout = window.setTimeout(() => {
+      if (flashVersion !== state.metronomeFlashVersion) {
+        return;
+      }
       elements.metronomeIndicator.classList.remove("active");
     }, 90);
   }, safeDelay);
@@ -1503,6 +1646,23 @@ function normalizeExerciseScore(score) {
   return clamp(Math.round(percentageScore), 0, 100);
 }
 
+function getRecordGraphDomainBeats(record) {
+  const storedTotal = Number(record?.totalQuarterBeats);
+  if (Number.isFinite(storedTotal) && storedTotal > 0) {
+    return storedTotal;
+  }
+
+  if (state.exercise.loaded?.id === record?.exerciseId) {
+    return Math.max(1, Number(state.exercise.loaded.totalQuarterBeats) || 1);
+  }
+
+  return Math.max(
+    1,
+    ...(record?.targetResults ?? []).map((point) => Number(point.beatPosition) || 0),
+    ...(record?.offsets ?? []).map((point) => Number(point.beatPosition) || 0)
+  );
+}
+
 function formatExerciseScore(score) {
   return `${normalizeExerciseScore(score)}%`;
 }
@@ -1525,6 +1685,9 @@ function setAppMode(mode) {
   }
 
   state.appMode = nextMode;
+  if (nextMode === "exercise") {
+    restoreOffscreenExerciseRender();
+  }
   document.body.classList.toggle("app-mode-exercise", nextMode === "exercise");
   document.body.classList.toggle("app-mode-settings", nextMode === "settings");
   document.body.classList.toggle("app-mode-stats", nextMode === "stats");
@@ -1532,6 +1695,10 @@ function setAppMode(mode) {
   elements.exerciseModeButton.classList.toggle("is-active", nextMode === "exercise");
   elements.settingsModeButton.classList.toggle("is-active", nextMode === "settings");
   elements.statsModeButton.classList.toggle("is-active", nextMode === "stats");
+  const modeInfo = MODE_INFO_COPY[nextMode] ?? MODE_INFO_COPY.settings;
+  elements.modeInfoEyebrow.textContent = modeInfo.eyebrow;
+  elements.modeInfoTitle.textContent = modeInfo.title;
+  elements.modeInfoCopy.textContent = modeInfo.copy;
   elements.timelineWorkspace.hidden = nextMode !== "live";
   elements.debugHomeHost.hidden = nextMode !== "live";
   elements.exerciseModeSection.hidden = nextMode !== "exercise";
@@ -1555,6 +1722,12 @@ function getOsmdClass() {
     window.opensheetmusicdisplay?.OpenSheetMusicDisplay ??
     window.OpenSheetMusicDisplay ??
     null
+  );
+}
+
+function getRenderedExerciseSheetSvg() {
+  return elements.sheetMusicContainer.querySelector(
+    "svg:not(.sheet-tendency-graph-layer):not(.sheet-dynamics-graph-layer)"
   );
 }
 
@@ -1654,7 +1827,7 @@ async function ensureExerciseSheetRendered() {
 }
 
 function normalizeExerciseSheetSvg() {
-  const svg = elements.sheetMusicContainer.querySelector("svg");
+  const svg = getRenderedExerciseSheetSvg();
   if (!svg) {
     return;
   }
@@ -1663,7 +1836,7 @@ function normalizeExerciseSheetSvg() {
   svg.style.width = "100%";
   svg.style.height = "auto";
   svg.style.minHeight = "280px";
-  svg.style.background = "#ffffff";
+  svg.style.background = "transparent";
 
   for (const element of svg.querySelectorAll("path, text, line, polyline, polygon, circle, ellipse")) {
     const fill = element.getAttribute("fill");
@@ -2154,7 +2327,6 @@ function updateExerciseStaticUi() {
 
   elements.exerciseTitle.textContent = exercise.title;
   elements.exerciseMetadata.textContent = `${exercise.tempoBpm} BPM · ${exercise.timeSignature.numerator}/${exercise.timeSignature.denominator} · ${exercise.fileName}`;
-  elements.exercisePartValue.textContent = `Part: ${exercise.selectedPartName}`;
   elements.exerciseHitTargetValue.textContent = `Targets: ${exercise.expectedHits.length}`;
   elements.exerciseDurationValue.textContent = `Duration: ${formatExerciseDuration(exercise.durationSeconds)}`;
 
@@ -2170,7 +2342,8 @@ function updateExerciseStaticUi() {
     elements.exerciseWarnings.hidden = true;
     elements.exerciseWarnings.textContent = "";
   }
-  updateExerciseHeatmapButton();
+  updateExerciseTendenciesButton();
+  updateExerciseDynamicsToggleButton();
 }
 
 function updateExerciseCaptureUi() {
@@ -2193,10 +2366,12 @@ function updateExerciseCaptureUi() {
   elements.metronomeSubdivisionSelect.disabled = shouldLockExerciseTempoControls;
   elements.metronomeNumeratorInput.disabled = shouldLockExerciseTempoControls;
   elements.metronomeDenominatorSelect.disabled = shouldLockExerciseTempoControls;
+  elements.metronomeVolumeInput.disabled = false;
   elements.metronomeEnabledInput.disabled = shouldLockExerciseTempoControls;
   elements.exerciseGuideEnabledInput.disabled = shouldLockExerciseTempoControls;
   elements.exerciseGuideToggleButton.disabled = shouldLockExerciseTempoControls;
-  elements.exerciseHeatmapButton.disabled = !state.exercise.loaded;
+  elements.exerciseTendenciesButton.disabled = !state.exercise.loaded;
+  elements.exerciseDynamicsToggleButton.disabled = !state.exercise.loaded;
 }
 
 function updateExercisePanelVisibility() {
@@ -2213,6 +2388,30 @@ function updateExerciseGuideToggleUi() {
     : "Play exercise during reps";
   elements.exerciseGuideToggleButton.setAttribute("aria-pressed", String(enabled));
   elements.exerciseGuideToggleButton.classList.toggle("is-active", enabled);
+}
+
+function updateExerciseTendenciesButton() {
+  if (!elements.exerciseTendenciesButton) {
+    return;
+  }
+
+  const enabled = Boolean(state.exercise.tendenciesVisible);
+  elements.exerciseTendenciesButton.textContent = enabled ? "Hide Tendencies" : "Display Tendencies";
+  elements.exerciseTendenciesButton.setAttribute("aria-pressed", String(enabled));
+  elements.exerciseTendenciesButton.classList.toggle("is-active", enabled);
+  elements.exerciseTendenciesButton.disabled = !state.exercise.loaded;
+}
+
+function updateExerciseDynamicsToggleButton() {
+  if (!elements.exerciseDynamicsToggleButton) {
+    return;
+  }
+
+  const enabled = Boolean(state.exercise.dynamicsVisible);
+  elements.exerciseDynamicsToggleButton.textContent = enabled ? "Hide Dynamics" : "Display Dynamics";
+  elements.exerciseDynamicsToggleButton.setAttribute("aria-pressed", String(enabled));
+  elements.exerciseDynamicsToggleButton.classList.toggle("is-active", enabled);
+  elements.exerciseDynamicsToggleButton.disabled = !state.exercise.loaded;
 }
 
 function loadExerciseHighScores() {
@@ -2285,6 +2484,7 @@ function loadExerciseRepHistory() {
         ...record,
         score: normalizeExerciseScore(record.score),
         offsets: Array.isArray(record.offsets) ? record.offsets : [],
+        dynamics: Array.isArray(record.dynamics) ? record.dynamics : [],
         targetResults: Array.isArray(record.targetResults) ? record.targetResults : [],
       }))
     : [];
@@ -2318,6 +2518,23 @@ function buildRepRecord(analysis, scoreRecord) {
       beatPosition: Number(match.expected.beatPosition.toFixed(4)),
       offsetMs: Number(match.offsetMs.toFixed(2)),
     }));
+  const exercise = state.exercise.loaded;
+  const totalQuarterBeats = Number(exercise?.totalQuarterBeats) || null;
+  const dynamics = state.hits
+    .map((hit) => {
+      const beatPosition = ((hit.timeSeconds - state.exercise.scoreStartTimeSeconds) * exercise.tempoBpm) / 60;
+      return {
+        beatPosition: Number(beatPosition.toFixed(4)),
+        strength: Number((Number(hit.strength) || 0).toFixed(6)),
+      };
+    })
+    .filter(
+      (point) =>
+        Number.isFinite(point.beatPosition) &&
+        point.beatPosition >= -0.001 &&
+        (!totalQuarterBeats || point.beatPosition <= totalQuarterBeats + 0.001) &&
+        point.strength > 0
+    );
   const exerciseHistory = state.exercise.repHistory.filter(
     (record) => record.exerciseId === scoreRecord.exerciseId
   );
@@ -2327,8 +2544,11 @@ function buildRepRecord(analysis, scoreRecord) {
     ...scoreRecord,
     repNumber: exerciseHistory.length + 1,
     tendency: getTimingTendency(scoreRecord.stats?.meanOffsetMs),
+    totalQuarterBeats,
+    durationSeconds: Number(exercise?.durationSeconds) || null,
     insights: analysis.insights ?? [],
     offsets,
+    dynamics,
     targetResults: buildTargetTimingResults(analysis),
   };
 }
@@ -2356,7 +2576,9 @@ function saveCompletedRep(analysis, scoreRecord) {
   saveExerciseRepHistory();
   renderSessionHistory();
   renderStatsPage();
-  updateExerciseHeatmapButton();
+  updateExerciseTendenciesButton();
+  updateExerciseDynamicsToggleButton();
+  requestRender();
 }
 
 function getDefaultExerciseIds() {
@@ -2455,8 +2677,14 @@ function renderStatsPage() {
       </div>
       <div class="exercise-stat-meta"><span>High</span><strong>${stats.highScore === null ? "--" : formatExerciseScore(stats.highScore)}</strong></div>
       <div class="exercise-stat-meta"><span>Average</span><strong>${stats.averageScore === null ? "--" : formatExerciseScore(stats.averageScore)}</strong></div>
-      <div class="exercise-stat-meta"><span>Tendency</span><strong>${stats.tendency}</strong></div>
       <div class="exercise-stat-meta"><span>Mean offset</span><strong>${Number.isFinite(stats.meanOffset) ? formatRushDragMilliseconds(stats.meanOffset) : "--"}</strong></div>
+      <button
+        class="ghost-button compact-button view-tendencies-button"
+        type="button"
+        data-exercise-tendencies-id="${stats.exercise.id}"
+      >
+        View Tendencies
+      </button>
     `;
     elements.exerciseStatsList.append(card);
   });
@@ -2491,25 +2719,49 @@ function renderSessionHistory() {
       <div class="session-history-meta"><span>Tendency</span><strong>${record.tendency ?? getTimingTendency(record.stats?.meanOffsetMs)}</strong></div>
       <div class="session-history-meta"><span>Tempo</span><strong>${record.tempoBpm} BPM</strong></div>
     `;
-    const graphButton = document.createElement("button");
-    graphButton.className = "mini-offset-graph";
-    graphButton.type = "button";
-    graphButton.setAttribute("aria-label", `Open rush drag graph for ${record.exerciseTitle}`);
-    graphButton.dataset.repId = record.id;
-    graphButton.innerHTML = buildOffsetGraphSvg(record.offsets, { width: 170, height: 58 });
-    item.append(graphButton);
+    const graphActions = document.createElement("div");
+    graphActions.className = "mini-rep-graphs";
+    const offsetGraphButton = document.createElement("button");
+    offsetGraphButton.className = "mini-rep-graph mini-offset-graph";
+    offsetGraphButton.type = "button";
+    offsetGraphButton.setAttribute("aria-label", `Open rush drag graph for ${record.exerciseTitle}`);
+    offsetGraphButton.dataset.repId = record.id;
+    offsetGraphButton.dataset.repGraphType = "offset";
+    offsetGraphButton.innerHTML = buildOffsetGraphSvg(record.offsets, {
+      width: 170,
+      height: 58,
+      totalQuarterBeats: getRecordGraphDomainBeats(record),
+    });
+    const dynamicsGraphButton = document.createElement("button");
+    dynamicsGraphButton.className = "mini-rep-graph mini-dynamics-graph";
+    dynamicsGraphButton.type = "button";
+    dynamicsGraphButton.setAttribute("aria-label", `Open dynamics graph for ${record.exerciseTitle}`);
+    dynamicsGraphButton.dataset.repId = record.id;
+    dynamicsGraphButton.dataset.repGraphType = "dynamics";
+    dynamicsGraphButton.innerHTML = buildDynamicsGraphSvg(record.dynamics, {
+      width: 170,
+      height: 58,
+      totalQuarterBeats: getRecordGraphDomainBeats(record),
+    });
+    graphActions.append(offsetGraphButton, dynamicsGraphButton);
+    item.append(graphActions);
     elements.sessionHistoryList.append(item);
   });
 }
 
-function buildOffsetGraphSvg(offsets = [], { width = 170, height = 58 } = {}) {
+function buildOffsetGraphSvg(offsets = [], { width = 170, height = 58, totalQuarterBeats = null } = {}) {
   const padding = 7;
   const centerY = height / 2;
   const maxOffset = 70;
-  const points = offsets.map((point, index) => {
+  const domainBeats = Math.max(
+    1,
+    Number(totalQuarterBeats) || 0,
+    ...offsets.map((point) => Number(point.beatPosition) || 0)
+  );
+  const points = offsets.map((point) => {
     const x =
       padding +
-      (offsets.length <= 1 ? 0 : (index / (offsets.length - 1)) * (width - padding * 2));
+      (clamp(Number(point.beatPosition) || 0, 0, domainBeats) / domainBeats) * (width - padding * 2);
     const y = centerY - (clamp(-point.offsetMs, -maxOffset, maxOffset) / maxOffset) * (height / 2 - padding);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
@@ -2530,20 +2782,71 @@ function buildOffsetGraphSvg(offsets = [], { width = 170, height = 58 } = {}) {
   `;
 }
 
-function openRepGraphOverlay(record) {
+function buildDynamicsGraphSvg(dynamics = [], { width = 170, height = 58, totalQuarterBeats = null } = {}) {
+  const padding = 7;
+  const domainBeats = Math.max(
+    1,
+    Number(totalQuarterBeats) || 0,
+    ...dynamics.map((point) => Number(point.beatPosition) || 0)
+  );
+  const strengths = dynamics.map((point) => Number(point.strength) || 0).filter((value) => value > 0);
+  const maxStrength = Math.max(0.08, ...strengths);
+  const points = dynamics.map((point) => {
+    const x =
+      padding +
+      (clamp(Number(point.beatPosition) || 0, 0, domainBeats) / domainBeats) * (width - padding * 2);
+    const y =
+      height -
+      padding -
+      (clamp((Number(point.strength) || 0) / maxStrength, 0, 1) * (height - padding * 2));
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const path = points.length > 1 ? points.join(" ") : "";
+  return `
+    <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" aria-hidden="true">
+      <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="rgba(255,255,255,0.16)" stroke-width="1" />
+      ${path ? `<polyline points="${path}" fill="none" stroke="rgba(115,224,169,0.9)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+      ${points
+        .map((point) => {
+          const [x, y] = point.split(",");
+          return `<circle cx="${x}" cy="${y}" r="2.1" fill="rgba(115,224,169,0.94)" stroke="rgba(255,255,255,0.42)" stroke-width="0.8" />`;
+        })
+        .join("")}
+    </svg>
+  `;
+}
+
+function openRepGraphOverlay(record, graphType = "offset") {
   state.activeRepGraphRecord = record;
-  elements.repGraphTitle.textContent = `${record.exerciseTitle} · ${formatExerciseScore(record.score)}`;
+  state.activeRepGraphType = graphType === "dynamics" ? "dynamics" : "offset";
+  elements.repGraphTitle.textContent = `${record.exerciseTitle} · ${formatExerciseScore(record.score)} · ${
+    state.activeRepGraphType === "dynamics" ? "dynamics" : "rush / drag"
+  }`;
   elements.repGraphOverlay.hidden = false;
   window.requestAnimationFrame(() => {
     elements.repGraphOverlay.classList.add("is-open");
-    drawStoredRepGraph(record);
+    drawActiveRepGraph();
   });
 }
 
 function closeRepGraphOverlay() {
   state.activeRepGraphRecord = null;
+  state.activeRepGraphType = "offset";
   elements.repGraphOverlay.classList.remove("is-open");
   elements.repGraphOverlay.hidden = true;
+}
+
+function drawActiveRepGraph() {
+  if (!state.activeRepGraphRecord) {
+    return;
+  }
+
+  if (state.activeRepGraphType === "dynamics") {
+    drawStoredDynamicsGraph(state.activeRepGraphRecord);
+    return;
+  }
+
+  drawStoredRepGraph(state.activeRepGraphRecord);
 }
 
 function drawStoredRepGraph(record) {
@@ -2562,6 +2865,7 @@ function drawStoredRepGraph(record) {
   const centerY = padding.top + plotHeight / 2;
   const maxOffsetMs = 80;
   const offsets = record.offsets ?? [];
+  const domainBeats = getRecordGraphDomainBeats(record);
 
   context.clearRect(0, 0, width, height);
   context.fillStyle = "rgba(255,255,255,0.03)";
@@ -2582,9 +2886,8 @@ function drawStoredRepGraph(record) {
   }
 
   if (offsets.length > 1) {
-    const maxBeat = Math.max(1, ...offsets.map((point) => point.beatPosition));
     const points = offsets.map((point) => ({
-      x: padding.left + (point.beatPosition / maxBeat) * plotWidth,
+      x: padding.left + (clamp(Number(point.beatPosition) || 0, 0, domainBeats) / domainBeats) * plotWidth,
       y:
         centerY -
         (clamp(-point.offsetMs, -maxOffsetMs, maxOffsetMs) / maxOffsetMs) * (plotHeight / 2),
@@ -2617,43 +2920,140 @@ function drawStoredRepGraph(record) {
   context.fillText("Positive = rushing, negative = dragging", padding.left, height - 14);
 }
 
+function drawStoredDynamicsGraph(record) {
+  const canvas = elements.repGraphCanvas;
+  if (!canvas || !record) {
+    return;
+  }
+
+  const container = canvas.parentElement;
+  const width = Math.max(320, getElementContentWidth(container, 900));
+  const height = 420;
+  const context = resizeCanvasToCssPixels(canvas, width, height);
+  const padding = { left: 58, right: 24, top: 28, bottom: 46 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const baselineY = padding.top + plotHeight;
+  const dynamics = Array.isArray(record.dynamics) ? record.dynamics : [];
+  const targets = Array.isArray(record.targetResults) ? record.targetResults : [];
+  const domainBeats = getRecordGraphDomainBeats(record);
+  const strengths = dynamics.map((point) => Number(point.strength) || 0).filter((value) => value > 0);
+  const maxStrength = Math.max(
+    0.08,
+    strengths.length ? Math.max(...strengths) * 1.06 : 0,
+    (percentile(strengths, 0.92) ?? 0) * 1.18
+  );
+  const beatToX = (beatPosition) =>
+    padding.left + (clamp(Number(beatPosition) || 0, 0, domainBeats) / domainBeats) * plotWidth;
+  const strengthToY = (strength) =>
+    baselineY - clamp((Number(strength) || 0) / maxStrength, 0, 1) * plotHeight;
+
+  context.clearRect(0, 0, width, height);
+  const panelGradient = context.createLinearGradient(0, padding.top, 0, baselineY);
+  panelGradient.addColorStop(0, "rgba(255, 184, 107, 0.10)");
+  panelGradient.addColorStop(1, "rgba(115, 224, 169, 0.025)");
+  context.fillStyle = panelGradient;
+  context.fillRect(padding.left, padding.top, plotWidth, plotHeight);
+
+  for (const percent of [0, 0.5, 1]) {
+    const y = baselineY - percent * plotHeight;
+    context.strokeStyle = percent === 0 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.08)";
+    context.lineWidth = percent === 0 ? 1.5 : 1;
+    context.beginPath();
+    context.moveTo(padding.left, y);
+    context.lineTo(width - padding.right, y);
+    context.stroke();
+    context.fillStyle = "rgba(243, 247, 251, 0.62)";
+    context.font = "12px Avenir Next, sans-serif";
+    context.textAlign = "right";
+    context.fillText(`${Math.round(percent * 100)}%`, padding.left - 8, y + 4);
+  }
+
+  for (let beat = 0; beat <= domainBeats + 0.0001; beat += 1) {
+    const x = beatToX(beat);
+    context.strokeStyle = beat % 4 === 0 ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)";
+    context.lineWidth = beat % 4 === 0 ? 1.2 : 1;
+    context.beginPath();
+    context.moveTo(x, padding.top);
+    context.lineTo(x, baselineY);
+    context.stroke();
+  }
+
+  for (const target of targets) {
+    const x = beatToX(target.beatPosition);
+    const accentLevel = clamp(Number(target.accentLevel) || 0, 0, 2);
+    const guideRatio = [0.32, 0.58, 0.9][accentLevel];
+    context.strokeStyle = ["rgba(255, 209, 138, 0.10)", "rgba(255, 209, 138, 0.16)", "rgba(255, 184, 107, 0.24)"][accentLevel];
+    context.lineWidth = [1, 1.6, 2.2][accentLevel];
+    context.beginPath();
+    context.moveTo(x, baselineY);
+    context.lineTo(x, baselineY - guideRatio * plotHeight);
+    context.stroke();
+  }
+
+  if (dynamics.length > 0) {
+    const points = dynamics.map((point) => ({
+      x: beatToX(point.beatPosition),
+      y: strengthToY(point.strength),
+      strength: Number(point.strength) || 0,
+    }));
+    const areaGradient = context.createLinearGradient(0, padding.top, 0, baselineY);
+    areaGradient.addColorStop(0, "rgba(255, 184, 107, 0.18)");
+    areaGradient.addColorStop(1, "rgba(115, 224, 169, 0.025)");
+    if (points.length > 1) {
+      context.beginPath();
+      points.forEach((point, index) => {
+        if (index === 0) {
+          context.moveTo(point.x, baselineY);
+          context.lineTo(point.x, point.y);
+        } else {
+          context.lineTo(point.x, point.y);
+        }
+      });
+      context.lineTo(points[points.length - 1].x, baselineY);
+      context.closePath();
+      context.fillStyle = areaGradient;
+      context.fill();
+
+      context.strokeStyle = "rgba(115, 224, 169, 0.9)";
+      context.lineWidth = 2.7;
+      context.shadowColor = "rgba(115, 224, 169, 0.22)";
+      context.shadowBlur = 10;
+      context.lineJoin = "round";
+      context.beginPath();
+      points.forEach((point, index) => {
+        if (index === 0) {
+          context.moveTo(point.x, point.y);
+        } else {
+          context.lineTo(point.x, point.y);
+        }
+      });
+      context.stroke();
+      context.shadowBlur = 0;
+    }
+
+    points.forEach((point) => {
+      drawTimelineMarker(context, point.x, point.y, 3.8, "rgba(115, 224, 169, 0.95)");
+    });
+  } else {
+    context.fillStyle = "rgba(243, 247, 251, 0.62)";
+    context.textAlign = "center";
+    context.font = "13px Avenir Next, sans-serif";
+    context.fillText("No saved dynamics data for this rep.", width / 2, height / 2);
+  }
+
+  context.fillStyle = "rgba(243, 247, 251, 0.72)";
+  context.textAlign = "left";
+  context.font = "13px Avenir Next, sans-serif";
+  context.fillText("Relative hit strength across the rep", padding.left, height - 16);
+}
+
 function getCurrentExerciseHeatmap() {
   if (!state.exercise.loaded) {
     return null;
   }
 
   return aggregateExerciseHeatmap(state.exercise.loaded, state.exercise.repHistory);
-}
-
-function updateExerciseHeatmapButton() {
-  if (!elements.exerciseHeatmapButton) {
-    return;
-  }
-
-  const heatmap = getCurrentExerciseHeatmap();
-  const repLabel = heatmap?.repCount ? `${heatmap.repCount} saved reps` : "No saved reps yet";
-  elements.exerciseHeatmapButton.textContent = "Historical Performance";
-  elements.exerciseHeatmapButton.setAttribute("aria-label", `Historical Performance, ${repLabel}`);
-  elements.exerciseHeatmapButton.disabled = !state.exercise.loaded;
-}
-
-function getHeatmapTargetColor(target) {
-  if (target.totalCount === 0) {
-    return "rgba(148, 163, 184, 0.34)";
-  }
-
-  if (target.missRate >= 0.35 && target.missedCount >= 2) {
-    return "rgba(255, 230, 150, 0.92)";
-  }
-
-  const intensity = clamp(target.intensity ?? 0, 0.08, 1);
-  if (target.tendency === "rush") {
-    return `rgba(255, 184, 107, ${0.32 + intensity * 0.62})`;
-  }
-  if (target.tendency === "drag") {
-    return `rgba(138, 199, 255, ${0.32 + intensity * 0.62})`;
-  }
-  return "rgba(115, 224, 169, 0.78)";
 }
 
 function summarizeHeatmapTarget(target) {
@@ -2682,114 +3082,601 @@ function setHeatmapDetails(target = null) {
 
   if (!target) {
     elements.exerciseHeatmapDetails.innerHTML =
-      "Select a marker to inspect average rush/drag for that written note.";
+      "Select a point on the timing trace to inspect average rush/drag for that written note.";
     return;
   }
 
   elements.exerciseHeatmapDetails.innerHTML = summarizeHeatmapTarget(target);
 }
 
-function drawExerciseHeatmap() {
-  const heatmap = state.activeHeatmap;
-  const canvas = elements.exerciseHeatmapCanvas;
-  if (!heatmap || !canvas || elements.exerciseHeatmapOverlay.hidden) {
+function getHeatmapTargetExpectedHit(target) {
+  const targetIndex = Number(target?.targetIndex);
+  return state.exercise.loaded?.expectedHits?.find(
+    (hit) => Number(hit.index) === targetIndex
+  ) ?? null;
+}
+
+function getHeatmapTargetSheetPosition(target, usageCounts) {
+  const positions = state.exercise.sheetCursorPositions.filter(Boolean);
+  if (!positions.length) {
+    return null;
+  }
+
+  const expectedHit = getHeatmapTargetExpectedHit(target);
+  const directPosition = positions.find(
+    (position) => Number(position.hitIndex) === Number(target.targetIndex)
+  );
+  const expectedTimeSeconds = Number(expectedHit?.timeSeconds);
+  const timeMatchedPosition = Number.isFinite(expectedTimeSeconds)
+    ? positions.reduce((best, position) => {
+        const distance = Math.abs(Number(position.timeSeconds) - expectedTimeSeconds);
+        return !best || distance < best.distance ? { position, distance } : best;
+      }, null)?.position
+    : null;
+  const position = directPosition ?? timeMatchedPosition;
+  if (!position) {
+    return null;
+  }
+
+  const bucketKey = `${Math.round(position.left)}:${Math.round(position.top)}:${Math.round(
+    position.height
+  )}`;
+  const usageCount = usageCounts.get(bucketKey) ?? 0;
+  usageCounts.set(bucketKey, usageCount + 1);
+
+  const splitIndex = Number(expectedHit?.splitIndex);
+  const splitCount = Number(expectedHit?.splitCount);
+  const duplicateOffset = Number.isFinite(splitIndex) && Number.isFinite(splitCount) && splitCount > 1
+    ? (splitIndex - (splitCount - 1) / 2) * 16
+    : usageCount * 14;
+
+  return {
+    left: position.left + duplicateOffset,
+    top: position.top + position.height * 0.52,
+  };
+}
+
+function getHeatmapStaffLineCandidates() {
+  const sourceContainer = elements.sheetMusicContainer;
+  const sourceSvg = getRenderedExerciseSheetSvg();
+  if (!sourceSvg) {
+    return [];
+  }
+
+  const containerRect = sourceContainer.getBoundingClientRect();
+  return [...sourceSvg.querySelectorAll("path, line, polyline")]
+    .map((element) => {
+      const rect = element.getBoundingClientRect();
+      const y = rect.top - containerRect.top + sourceContainer.scrollTop + rect.height / 2;
+      return {
+        y,
+        width: rect.width,
+        height: rect.height,
+      };
+    })
+    .filter((line) => line.width >= 90 && line.height <= 1.5 && Number.isFinite(line.y))
+    .map((line) => line.y)
+    .sort((left, right) => left - right);
+}
+
+function getNearestStaffLineY(position, staffLineYs) {
+  if (!staffLineYs.length) {
+    return position.top;
+  }
+
+  return staffLineYs.reduce((nearest, candidateY) =>
+    Math.abs(candidateY - position.top) < Math.abs(nearest - position.top) ? candidateY : nearest
+  );
+}
+
+function getHeatmapTraceColor(target) {
+  if (target.tendency === "rush") {
+    return "#ffb86b";
+  }
+
+  if (target.tendency === "drag") {
+    return "#6fb6ff";
+  }
+
+  return "#55d695";
+}
+
+function getHeatmapMarkerLabel(target) {
+  const offsetText =
+    target.meanOffsetMs === null ? "no timing history" : formatPlainMilliseconds(target.meanOffsetMs);
+  const measureText = target.measureNumber ? `measure ${target.measureNumber}` : "unknown measure";
+  return `Target ${target.targetIndex}, ${measureText}, ${offsetText}`;
+}
+
+function clearHeatmapSheetLayers() {
+  elements.exerciseHeatmapGraphLayer.replaceChildren();
+  elements.exerciseHeatmapMarkerLayer.replaceChildren();
+}
+
+function renderHeatmapSheetClone() {
+  const sourceSvg = getRenderedExerciseSheetSvg();
+  if (!sourceSvg) {
+    elements.exerciseHeatmapSheetClone.innerHTML =
+      '<div class="heatmap-empty-sheet">Load an exercise before opening historical performance.</div>';
+    clearHeatmapSheetLayers();
+    return null;
+  }
+
+  const sourceContainer = elements.sheetMusicContainer;
+  const sourceRect = sourceSvg.getBoundingClientRect();
+  const sourceWidth = Math.max(sourceSvg.scrollWidth, sourceRect.width, 720);
+  const sourceHeight = Math.max(sourceSvg.scrollHeight, sourceRect.height, 320);
+  const stageWidth = Math.max(sourceContainer.scrollWidth, sourceWidth + 28);
+  const stageHeight = Math.max(sourceContainer.scrollHeight, sourceHeight + 28);
+  const renderKey = `${state.exercise.loaded?.id ?? "exercise"}:${Math.round(stageWidth)}:${Math.round(
+    stageHeight
+  )}:${Math.round(sourceWidth)}`;
+
+  elements.exerciseHeatmapSheetStage.style.width = `${stageWidth}px`;
+  elements.exerciseHeatmapSheetStage.style.minHeight = `${stageHeight}px`;
+  elements.exerciseHeatmapGraphLayer.setAttribute("viewBox", `0 0 ${stageWidth} ${stageHeight}`);
+  elements.exerciseHeatmapGraphLayer.setAttribute("width", String(stageWidth));
+  elements.exerciseHeatmapGraphLayer.setAttribute("height", String(stageHeight));
+  elements.exerciseHeatmapMarkerLayer.style.width = `${stageWidth}px`;
+  elements.exerciseHeatmapMarkerLayer.style.height = `${stageHeight}px`;
+
+  if (state.activeHeatmap?.sheetRenderKey !== renderKey) {
+    const clone = sourceSvg.cloneNode(true);
+    clone.querySelectorAll("[id]").forEach((element) => element.removeAttribute("id"));
+    clone.querySelectorAll(".sheet-progress-cursor, .sheet-ready-prompt").forEach((element) => {
+      element.remove();
+    });
+    clone.style.width = `${sourceWidth}px`;
+    clone.style.maxWidth = "none";
+    clone.style.height = "auto";
+    elements.exerciseHeatmapSheetClone.replaceChildren(clone);
+    if (state.activeHeatmap) {
+      state.activeHeatmap.sheetRenderKey = renderKey;
+    }
+  }
+
+  return { stageWidth, stageHeight };
+}
+
+function createSvgElement(tagName, attributes = {}) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tagName);
+  for (const [name, value] of Object.entries(attributes)) {
+    element.setAttribute(name, String(value));
+  }
+  return element;
+}
+
+function getHeatmapTracePoint(target, position, staffLineYs) {
+  const maxOffsetMs = 70;
+  const maxVerticalOffset = 30;
+  const meanOffsetMs = Number(target.meanOffsetMs);
+  const offsetMs = Number.isFinite(meanOffsetMs) ? clamp(meanOffsetMs, -maxOffsetMs, maxOffsetMs) : 0;
+  const baselineY = getNearestStaffLineY(position, staffLineYs);
+  return {
+    x: position.left,
+    y: baselineY - (offsetMs / maxOffsetMs) * maxVerticalOffset,
+    baselineY,
+    target,
+  };
+}
+
+function groupHeatmapTraceRows(points) {
+  const rows = [];
+  for (const point of points) {
+    const row = rows.find((candidate) => Math.abs(candidate.centerY - point.baselineY) <= 62);
+    if (row) {
+      row.points.push(point);
+      row.centerY =
+        row.points.reduce((sum, item) => sum + item.baselineY, 0) / row.points.length;
+      continue;
+    }
+
+    rows.push({ centerY: point.baselineY, points: [point] });
+  }
+
+  return rows
+    .map((row) => ({
+      ...row,
+      points: row.points.sort((left, right) => left.x - right.x),
+    }))
+    .sort((left, right) => left.centerY - right.centerY);
+}
+
+function renderHeatmapTrace(svg, points) {
+  svg.replaceChildren();
+
+  const rows = groupHeatmapTraceRows(points);
+  const fragment = document.createDocumentFragment();
+  for (const row of rows) {
+    for (let index = 1; index < row.points.length; index += 1) {
+      const previous = row.points[index - 1];
+      const current = row.points[index];
+      const distance = Math.abs(current.x - previous.x);
+      if (distance > 110) {
+        continue;
+      }
+
+      const controlOffset = Math.min(24, distance * 0.34);
+      const segmentColor = getHeatmapTraceColor(current.target);
+      const path = createSvgElement("path", {
+        d: `M ${previous.x.toFixed(2)} ${previous.y.toFixed(2)} C ${(previous.x + controlOffset).toFixed(2)} ${previous.y.toFixed(2)}, ${(current.x - controlOffset).toFixed(2)} ${current.y.toFixed(2)}, ${current.x.toFixed(2)} ${current.y.toFixed(2)}`,
+        class: "heatmap-trace-segment",
+        stroke: segmentColor,
+      });
+      fragment.append(path);
+    }
+  }
+
+  svg.append(fragment);
+}
+
+function getInlineTendencyGraphLayer() {
+  let graphLayer = elements.sheetMusicContainer.querySelector(".sheet-tendency-graph-layer");
+  if (!graphLayer) {
+    graphLayer = createSvgElement("svg", {
+      class: "sheet-tendency-graph-layer",
+      "aria-hidden": "true",
+    });
+    elements.sheetMusicContainer.prepend(graphLayer);
+  }
+
+  return graphLayer;
+}
+
+function getInlineDynamicsGraphLayer() {
+  let graphLayer = elements.sheetMusicContainer.querySelector(".sheet-dynamics-graph-layer");
+  if (!graphLayer) {
+    graphLayer = createSvgElement("svg", {
+      class: "sheet-dynamics-graph-layer",
+      "aria-hidden": "true",
+    });
+    elements.sheetMusicContainer.prepend(graphLayer);
+  }
+
+  return graphLayer;
+}
+
+function clearInlineExerciseTendencies() {
+  elements.sheetMusicContainer.querySelector(".sheet-tendency-graph-layer")?.remove();
+}
+
+function clearInlineExerciseDynamics() {
+  elements.sheetMusicContainer.querySelector(".sheet-dynamics-graph-layer")?.remove();
+}
+
+function buildHeatmapTracePoints(heatmap) {
+  if (!state.exercise.sheetCursorPositions.length) {
+    cacheExerciseSheetCursorPositions();
+  }
+
+  const usageCounts = new Map();
+  const staffLineYs = getHeatmapStaffLineCandidates();
+  const tracePoints = [];
+  for (const target of heatmap.targets) {
+    if (target.totalCount === 0) {
+      continue;
+    }
+
+    const position = getHeatmapTargetSheetPosition(target, usageCounts);
+    if (!position) {
+      continue;
+    }
+
+    tracePoints.push(getHeatmapTracePoint(target, position, staffLineYs));
+  }
+
+  return tracePoints;
+}
+
+function drawInlineExerciseTendencies() {
+  if (!state.exercise.tendenciesVisible || !state.exercise.loaded || elements.exerciseModeSection.hidden) {
+    clearInlineExerciseTendencies();
     return;
   }
 
-  const container = canvas.parentElement;
-  const width = Math.max(760, getElementContentWidth(container, 1120));
-  const height = 520;
-  const context = resizeCanvasToCssPixels(canvas, width, height);
-  const padding = { left: 66, right: 28, top: 34, bottom: 64 };
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-  const centerY = padding.top + plotHeight / 2;
-  const totalBeats = Math.max(1, state.exercise.loaded?.totalQuarterBeats ?? 1);
-  const maxOffsetMs = 70;
+  const sourceSvg = getRenderedExerciseSheetSvg();
+  const heatmap = getCurrentExerciseHeatmap();
+  if (!sourceSvg || !heatmap || (heatmap.totalRepCount ?? heatmap.repCount) === 0) {
+    clearInlineExerciseTendencies();
+    return;
+  }
 
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "rgba(255, 255, 255, 0.025)";
-  context.fillRect(padding.left, padding.top, plotWidth, plotHeight);
+  const graphLayer = getInlineTendencyGraphLayer();
+  const width = Math.max(elements.sheetMusicContainer.scrollWidth, sourceSvg.scrollWidth, 720);
+  const height = Math.max(elements.sheetMusicContainer.scrollHeight, sourceSvg.scrollHeight, 320);
+  graphLayer.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  graphLayer.setAttribute("width", String(width));
+  graphLayer.setAttribute("height", String(height));
+  graphLayer.style.width = `${width}px`;
+  graphLayer.style.height = `${height}px`;
+  renderHeatmapTrace(graphLayer, buildHeatmapTracePoints(heatmap));
+}
 
-  for (let beat = 0; beat <= Math.ceil(totalBeats); beat += 1) {
-    const x = padding.left + (beat / totalBeats) * plotWidth;
-    context.strokeStyle = beat % 4 === 0 ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.08)";
-    context.lineWidth = beat % 4 === 0 ? 1.6 : 1;
-    context.beginPath();
-    context.moveTo(x, padding.top);
-    context.lineTo(x, padding.top + plotHeight);
-    context.stroke();
-    context.fillStyle = "rgba(243, 247, 251, 0.54)";
-    context.font = "11px Avenir Next, sans-serif";
-    context.textAlign = "center";
-    if (beat % 2 === 0) {
-      context.fillText(String(beat), x, height - 28);
+function buildInlineDynamicsTracePoints() {
+  const exercise = state.exercise.loaded;
+  if (!exercise) {
+    return [];
+  }
+
+  if (!state.exercise.sheetCursorPositions.length) {
+    cacheExerciseSheetCursorPositions();
+  }
+
+  const dynamicsTargets = getHistoricalDynamicsTargets(exercise);
+  if (!dynamicsTargets.length) {
+    return [];
+  }
+
+  const scaleMax = Math.max(
+    0.08,
+    ...dynamicsTargets.map((target) => target.meanStrength)
+  );
+  const staffLineYs = getHeatmapStaffLineCandidates();
+  const usageCounts = new Map();
+  return dynamicsTargets
+    .map((target) => {
+      const position = getHeatmapTargetSheetPosition(target, usageCounts);
+      if (!position) {
+        return null;
+      }
+
+      const baselineY = getNearestStaffLineY(position, staffLineYs);
+      const y = baselineY - clamp(target.meanStrength / scaleMax, 0, 1) * 34;
+      return {
+        x: position.left,
+        y,
+        baselineY,
+        strength: target.meanStrength,
+        target,
+      };
+    })
+    .filter(Boolean);
+}
+
+function getHistoricalDynamicsTargets(exercise) {
+  const expectedHits = Array.isArray(exercise?.expectedHits) ? exercise.expectedHits : [];
+  if (!expectedHits.length) {
+    return [];
+  }
+
+  const records = state.exercise.repHistory.filter(
+    (record) =>
+      record.exerciseId === exercise.id &&
+      Array.isArray(record.dynamics) &&
+      record.dynamics.length > 0
+  );
+  if (!records.length) {
+    return [];
+  }
+
+  const strengthsByTarget = new Map(
+    expectedHits.map((hit, index) => [Number(hit.index ?? index + 1), []])
+  );
+  const sortedExpectedHits = [...expectedHits].sort(
+    (left, right) => Number(left.beatPosition) - Number(right.beatPosition)
+  );
+  const targetWindows = new Map();
+  sortedExpectedHits.forEach((hit, index) => {
+    const beatPosition = Number(hit.beatPosition) || 0;
+    const previousBeat = Number(sortedExpectedHits[index - 1]?.beatPosition);
+    const nextBeat = Number(sortedExpectedHits[index + 1]?.beatPosition);
+    const neighborDistances = [previousBeat, nextBeat]
+      .filter((value) => Number.isFinite(value))
+      .map((value) => Math.abs(beatPosition - value))
+      .filter((value) => value > 0.0001);
+    const nearestDistance = neighborDistances.length ? Math.min(...neighborDistances) : 0.5;
+    targetWindows.set(Number(hit.index ?? index + 1), clamp(nearestDistance * 0.45, 0.08, 0.24));
+  });
+
+  for (const record of records) {
+    const dynamics = record.dynamics
+      .map((point) => ({
+        beatPosition: Number(point.beatPosition),
+        strength: Number(point.strength),
+      }))
+      .filter(
+        (point) =>
+          Number.isFinite(point.beatPosition) &&
+          Number.isFinite(point.strength) &&
+          point.strength > 0
+      );
+    if (!dynamics.length) {
+      continue;
+    }
+
+    for (const expected of expectedHits) {
+      const targetIndex = Number(expected.index);
+      const targetBeat = Number(expected.beatPosition);
+      if (!Number.isFinite(targetIndex) || !Number.isFinite(targetBeat)) {
+        continue;
+      }
+
+      const windowBeats = targetWindows.get(targetIndex) ?? 0.18;
+      let bestPoint = null;
+      for (const point of dynamics) {
+        const distance = Math.abs(point.beatPosition - targetBeat);
+        if (distance > windowBeats) {
+          continue;
+        }
+        if (!bestPoint || distance < bestPoint.distance) {
+          bestPoint = { point, distance };
+        }
+      }
+
+      if (bestPoint) {
+        strengthsByTarget.get(targetIndex)?.push(bestPoint.point.strength);
+      }
     }
   }
 
-  for (const band of [-50, -25, 0, 25, 50]) {
-    const y = centerY - (band / maxOffsetMs) * (plotHeight / 2);
-    context.strokeStyle = band === 0 ? "rgba(255,255,255,0.26)" : "rgba(255,255,255,0.09)";
-    context.lineWidth = band === 0 ? 1.8 : 1;
-    context.beginPath();
-    context.moveTo(padding.left, y);
-    context.lineTo(width - padding.right, y);
-    context.stroke();
-    context.fillStyle = "rgba(243, 247, 251, 0.62)";
-    context.font = "12px Avenir Next, sans-serif";
-    context.textAlign = "right";
-    context.fillText(`${band}`, padding.left - 10, y + 4);
-  }
+  return expectedHits
+    .map((expected, index) => {
+      const targetIndex = Number(expected.index ?? index + 1);
+      const strengths = strengthsByTarget.get(targetIndex) ?? [];
+      if (!strengths.length) {
+        return null;
+      }
 
-  const positions = [];
-  for (const target of heatmap.targets) {
-    const x = padding.left + (target.beatPosition / totalBeats) * plotWidth;
-    const y =
-      target.meanOffsetMs === null
-        ? centerY
-        : centerY -
-          (clamp(target.meanOffsetMs, -maxOffsetMs, maxOffsetMs) / maxOffsetMs) *
-            (plotHeight / 2);
-    const radius = target.totalCount === 0 ? 4 : 6 + clamp(target.matchedCount, 0, 12) * 0.35;
-    const color = getHeatmapTargetColor(target);
+      return {
+        targetIndex,
+        beatPosition: Number(expected.beatPosition) || 0,
+        meanStrength: averageNumbers(strengths),
+        count: strengths.length,
+      };
+    })
+    .filter(Boolean);
+}
 
-    context.strokeStyle = color;
-    context.lineWidth = target.totalCount === 0 ? 1.2 : 2.4;
-    context.beginPath();
-    context.moveTo(x, centerY);
-    context.lineTo(x, y);
-    context.stroke();
+function renderDynamicsTrace(svg, points) {
+  svg.replaceChildren();
 
-    context.fillStyle = color;
-    context.beginPath();
-    context.arc(x, y, radius, 0, Math.PI * 2);
-    context.fill();
+  const rows = groupHeatmapTraceRows(points);
+  const fragment = document.createDocumentFragment();
+  for (const row of rows) {
+    for (let index = 1; index < row.points.length; index += 1) {
+      const previous = row.points[index - 1];
+      const current = row.points[index];
+      const distance = Math.abs(current.x - previous.x);
+      if (distance > 120) {
+        continue;
+      }
 
-    if (target.missRate >= 0.35 && target.missedCount >= 2) {
-      context.strokeStyle = "rgba(3, 10, 15, 0.68)";
-      context.lineWidth = 2;
-      context.beginPath();
-      context.moveTo(x - radius * 0.5, y - radius * 0.5);
-      context.lineTo(x + radius * 0.5, y + radius * 0.5);
-      context.moveTo(x + radius * 0.5, y - radius * 0.5);
-      context.lineTo(x - radius * 0.5, y + radius * 0.5);
-      context.stroke();
+      const controlOffset = Math.min(24, distance * 0.34);
+      const path = createSvgElement("path", {
+        d: `M ${previous.x.toFixed(2)} ${previous.y.toFixed(2)} C ${(previous.x + controlOffset).toFixed(2)} ${previous.y.toFixed(2)}, ${(current.x - controlOffset).toFixed(2)} ${current.y.toFixed(2)}, ${current.x.toFixed(2)} ${current.y.toFixed(2)}`,
+        class: "dynamics-trace-segment",
+      });
+      fragment.append(path);
     }
 
-    positions.push({ x, y, radius: radius + 8, target });
+    for (const point of row.points) {
+      fragment.append(createSvgElement("circle", {
+        class: "dynamics-trace-point",
+        cx: point.x.toFixed(2),
+        cy: point.y.toFixed(2),
+        r: 3.2,
+      }));
+    }
   }
 
-  state.activeHeatmap.markerPositions = positions;
+  svg.append(fragment);
+}
 
-  context.fillStyle = "rgba(243, 247, 251, 0.72)";
-  context.font = "13px Avenir Next, sans-serif";
-  context.textAlign = "center";
-  context.fillText("Beat position", padding.left + plotWidth / 2, height - 10);
-  context.save();
-  context.translate(18, centerY);
-  context.rotate(-Math.PI / 2);
-  context.fillText("Average offset ms: rushing above center, dragging below", 0, 0);
-  context.restore();
+function drawInlineExerciseDynamics() {
+  if (!state.exercise.dynamicsVisible || !state.exercise.loaded || elements.exerciseModeSection.hidden) {
+    clearInlineExerciseDynamics();
+    return;
+  }
+
+  const sourceSvg = getRenderedExerciseSheetSvg();
+  if (!sourceSvg) {
+    clearInlineExerciseDynamics();
+    return;
+  }
+
+  const tracePoints = buildInlineDynamicsTracePoints();
+  if (!tracePoints.length) {
+    clearInlineExerciseDynamics();
+    return;
+  }
+
+  const graphLayer = getInlineDynamicsGraphLayer();
+  const width = Math.max(elements.sheetMusicContainer.scrollWidth, sourceSvg.scrollWidth, 720);
+  const height = Math.max(elements.sheetMusicContainer.scrollHeight, sourceSvg.scrollHeight, 320);
+  graphLayer.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  graphLayer.setAttribute("width", String(width));
+  graphLayer.setAttribute("height", String(height));
+  graphLayer.style.width = `${width}px`;
+  graphLayer.style.height = `${height}px`;
+  renderDynamicsTrace(graphLayer, tracePoints);
+}
+
+function drawExerciseHeatmap() {
+  const heatmap = state.activeHeatmap;
+  if (!heatmap || elements.exerciseHeatmapOverlay.hidden) {
+    return;
+  }
+
+  const stage = renderHeatmapSheetClone();
+  if (!stage) {
+    return;
+  }
+
+  const tracePoints = buildHeatmapTracePoints(heatmap);
+  const hitTargets = [];
+  for (const point of tracePoints) {
+    const target = point.target;
+    const hitTarget = document.createElement("button");
+    hitTarget.type = "button";
+    hitTarget.className = "heatmap-trace-hit-target";
+    hitTarget.dataset.targetIndex = String(target.targetIndex);
+    hitTarget.setAttribute("aria-label", getHeatmapMarkerLabel(target));
+    hitTarget.style.left = `${point.x}px`;
+    hitTarget.style.top = `${point.y}px`;
+    hitTargets.push(hitTarget);
+  }
+
+  renderHeatmapTrace(elements.exerciseHeatmapGraphLayer, tracePoints);
+  elements.exerciseHeatmapMarkerLayer.replaceChildren(...hitTargets);
+  state.activeHeatmap.markerPositions = tracePoints.map((point) => ({
+    x: point.x,
+    y: point.y,
+    radius: 16,
+    target: point.target,
+  }));
+}
+
+function activateOffscreenExerciseRender() {
+  if (state.appMode === "exercise" || state.exercise.offscreenRenderActive) {
+    return;
+  }
+
+  state.exercise.offscreenRenderActive = true;
+  state.exercise.offscreenRenderPreviousHidden = elements.exerciseModeSection.hidden;
+  state.exercise.offscreenRenderPreviousStyle = elements.exerciseModeSection.getAttribute("style") ?? "";
+  elements.exerciseModeSection.hidden = false;
+  elements.exerciseModeSection.style.cssText = [
+    "display: grid",
+    "position: fixed",
+    "left: -12000px",
+    "top: 0",
+    "width: 1180px",
+    "max-width: 1180px",
+    "visibility: hidden",
+    "pointer-events: none",
+  ].join(";");
+}
+
+function restoreOffscreenExerciseRender() {
+  if (!state.exercise.offscreenRenderActive) {
+    return;
+  }
+
+  state.exercise.offscreenRenderActive = false;
+  elements.exerciseModeSection.hidden = state.exercise.offscreenRenderPreviousHidden;
+  elements.exerciseModeSection.setAttribute("style", state.exercise.offscreenRenderPreviousStyle);
+  state.exercise.offscreenRenderPreviousStyle = "";
+}
+
+async function ensureExerciseTendenciesSourceRendered(exerciseId) {
+  const shouldLoadExercise =
+    state.exercise.selectedExerciseId !== exerciseId || state.exercise.loaded?.id !== exerciseId;
+
+  if (state.appMode !== "exercise") {
+    activateOffscreenExerciseRender();
+  }
+
+  if (shouldLoadExercise) {
+    elements.exerciseSelect.value = exerciseId;
+    state.exercise.selectionRequestId = exerciseId;
+    await loadBuiltInExercise(exerciseId);
+    state.exercise.selectedExerciseId = exerciseId;
+    return;
+  }
+
+  if (!state.exercise.osmd && state.exercise.sourceXmlText) {
+    await renderExerciseSheet(state.exercise.sourceXmlText);
+  }
 }
 
 function openExerciseHeatmapOverlay() {
@@ -2800,10 +3687,13 @@ function openExerciseHeatmapOverlay() {
 
   state.activeHeatmap = heatmap;
   elements.exerciseHeatmapTitle.textContent = `${heatmap.exerciseTitle} · historical performance`;
+  const excludedText = heatmap.excludedRepCount
+    ? ` · ${heatmap.excludedRepCount} outlier rep${heatmap.excludedRepCount === 1 ? "" : "s"} excluded`
+    : "";
   elements.exerciseHeatmapSummary.textContent =
-    heatmap.repCount === 0
+    (heatmap.totalRepCount ?? heatmap.repCount) === 0
       ? "Complete a few reps to build a timing heatmap for this exercise."
-      : `${heatmap.repCount} saved reps · ${heatmap.matchedTargetCount}/${heatmap.targets.length} written targets have timing history · overall ${formatPlainMilliseconds(heatmap.overallMeanOffsetMs, "--")}`;
+      : `${heatmap.repCount} of ${heatmap.totalRepCount ?? heatmap.repCount} saved reps used${excludedText} · ${heatmap.matchedTargetCount}/${heatmap.targets.length} written targets have timing history · overall ${formatPlainMilliseconds(heatmap.overallMeanOffsetMs, "--")}`;
   setHeatmapDetails();
   elements.exerciseHeatmapOverlay.hidden = false;
   window.requestAnimationFrame(() => {
@@ -2812,20 +3702,38 @@ function openExerciseHeatmapOverlay() {
   });
 }
 
+async function openExerciseHeatmapOverlayForExercise(exerciseId) {
+  try {
+    await ensureExerciseTendenciesSourceRendered(exerciseId);
+    openExerciseHeatmapOverlay();
+  } catch (error) {
+    restoreOffscreenExerciseRender();
+    setMessage(`Could not open tendencies: ${error.message}`);
+  }
+}
+
 function closeExerciseHeatmapOverlay() {
   state.activeHeatmap = null;
   elements.exerciseHeatmapOverlay.classList.remove("is-open");
   elements.exerciseHeatmapOverlay.hidden = true;
+  clearHeatmapSheetLayers();
+  restoreOffscreenExerciseRender();
 }
 
 function getHeatmapMarkerAtEvent(event) {
-  const canvas = elements.exerciseHeatmapCanvas;
   const heatmap = state.activeHeatmap;
-  if (!canvas || !heatmap?.markerPositions) {
+  const markerElement = event.target.closest?.(".heatmap-trace-hit-target");
+  if (markerElement) {
+    const targetIndex = Number(markerElement.dataset.targetIndex);
+    const target = heatmap?.targets?.find((candidate) => candidate.targetIndex === targetIndex);
+    return target ? { target } : null;
+  }
+
+  if (!heatmap?.markerPositions) {
     return null;
   }
 
-  const rect = canvas.getBoundingClientRect();
+  const rect = elements.exerciseHeatmapMarkerLayer.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
   return (
@@ -2921,6 +3829,7 @@ function closeExerciseResultOverlay({ save = true } = {}) {
 function captureCurrentMetronomeSettings() {
   return {
     enabled: elements.metronomeEnabledInput.checked,
+    wasRunning: state.metronomeRunning,
     tempo: getMetronomeTempo(),
     subdivision: elements.metronomeSubdivisionSelect.value,
     numerator: getTimeSignature().numerator,
@@ -2947,7 +3856,7 @@ async function applyMetronomeSettings(settings, { resync = true } = {}) {
     state.simulator.baseBpm = settings.tempo;
   }
 
-  if (settings.enabled) {
+  if (settings.enabled && settings.wasRunning !== false) {
     if (state.metronomeRunning) {
       await resyncMetronomeSchedule();
     } else {
@@ -2978,47 +3887,86 @@ function getCalibrationEighthLabel(stepIndex) {
 function buildCalibrationClickSequence(startBeatPosition, startTimeSeconds) {
   const sequence = [];
   const eighthNoteSeconds = 60 / CALIBRATION_TEMPO / 2;
-  const introSteps = CALIBRATION_INTRO_BARS * CALIBRATION_NUMERATOR * 2;
+  const beatSeconds = 60 / CALIBRATION_TEMPO;
+  const phases = [];
+  const targetTimes = [];
+  let currentTimeSeconds = startTimeSeconds;
+  let currentBeatPosition = startBeatPosition;
 
-  CALIBRATION_TAP_OFF_PATTERN.forEach((accentLevel, stepIndex) => {
-    if (accentLevel === null) {
-      return;
+  for (const phaseConfig of SINGLE_CALIBRATION_PHASES) {
+    const phaseDurationSeconds =
+      phaseConfig.metronome === "tap-off"
+        ? CALIBRATION_TAP_OFF_PATTERN.length * eighthNoteSeconds
+        : phaseConfig.bars
+          ? phaseConfig.bars * CALIBRATION_NUMERATOR * beatSeconds
+          : phaseConfig.durationSeconds;
+    const phase = {
+      ...phaseConfig,
+      startTimeSeconds: currentTimeSeconds,
+      endTimeSeconds: currentTimeSeconds + phaseDurationSeconds,
+    };
+    phases.push(phase);
+
+    if (phaseConfig.metronome === "tap-off") {
+      CALIBRATION_TAP_OFF_PATTERN.forEach((accentLevel, stepIndex) => {
+        if (accentLevel === null) {
+          return;
+        }
+
+        const beatPosition = currentBeatPosition + stepIndex * 0.5;
+        sequence.push({
+          timeSeconds: currentTimeSeconds + stepIndex * eighthNoteSeconds,
+          beatPosition,
+          beatNumber: (Math.floor(beatPosition) % CALIBRATION_NUMERATOR) + 1,
+          stepInMeasure: stepIndex % (CALIBRATION_NUMERATOR * 2),
+          subdivision: CALIBRATION_SUBDIVISION,
+          label: getCalibrationEighthLabel(stepIndex),
+          accentLevel,
+          phaseId: phase.id,
+        });
+      });
     }
 
-    const beatPosition = startBeatPosition + stepIndex * 0.5;
-    sequence.push({
-      timeSeconds: startTimeSeconds + stepIndex * eighthNoteSeconds,
-      beatPosition,
-      beatNumber: (Math.floor(beatPosition) % CALIBRATION_NUMERATOR) + 1,
-      stepInMeasure: stepIndex % (CALIBRATION_NUMERATOR * 2),
-      subdivision: CALIBRATION_SUBDIVISION,
-      label: getCalibrationEighthLabel(stepIndex),
-      accentLevel,
-    });
-  });
+    if (phaseConfig.metronome === "eighths") {
+      const captureSteps = Math.max(1, Math.round(phaseDurationSeconds / eighthNoteSeconds));
+      for (let stepIndex = 0; stepIndex < captureSteps; stepIndex += 1) {
+        const beatPosition = currentBeatPosition + stepIndex * 0.5;
+        const timeSeconds = currentTimeSeconds + stepIndex * eighthNoteSeconds;
+        const accentLevel = stepIndex % (CALIBRATION_NUMERATOR * 2) === 0
+          ? 2
+          : stepIndex % 2 === 0
+            ? 1
+            : 0;
+        const click = {
+          timeSeconds,
+          beatPosition,
+          beatNumber: (Math.floor(beatPosition) % CALIBRATION_NUMERATOR) + 1,
+          stepInMeasure: stepIndex % (CALIBRATION_NUMERATOR * 2),
+          subdivision: CALIBRATION_SUBDIVISION,
+          label: getCalibrationEighthLabel(stepIndex),
+          accentLevel,
+          phaseId: phase.id,
+        };
+        sequence.push(click);
+        targetTimes.push({
+          timeSeconds,
+          phaseId: phase.id,
+          dynamicLevel: phase.dynamicLevel,
+          targetHeightInches: phase.targetHeightInches ?? null,
+        });
+      }
+    }
 
-  const introDurationSeconds = introSteps * eighthNoteSeconds;
-  const captureStartTimeSeconds = startTimeSeconds + introDurationSeconds;
-  const captureStartBeatPosition = startBeatPosition + introSteps * 0.5;
-  const captureSteps = CALIBRATION_CAPTURE_BARS * CALIBRATION_NUMERATOR * 2;
-
-  for (let stepIndex = 0; stepIndex < captureSteps; stepIndex += 1) {
-    const beatPosition = captureStartBeatPosition + stepIndex * 0.5;
-    sequence.push({
-      timeSeconds: captureStartTimeSeconds + stepIndex * eighthNoteSeconds,
-      beatPosition,
-      beatNumber: (Math.floor(beatPosition) % CALIBRATION_NUMERATOR) + 1,
-      stepInMeasure: stepIndex % (CALIBRATION_NUMERATOR * 2),
-      subdivision: CALIBRATION_SUBDIVISION,
-      label: getCalibrationEighthLabel(stepIndex),
-      accentLevel: stepIndex % 2 === 0 ? 2 : 0,
-    });
+    currentTimeSeconds = phase.endTimeSeconds;
+    currentBeatPosition += phaseDurationSeconds / beatSeconds;
   }
 
   return {
     sequence,
-    captureStartTimeSeconds,
-    captureEndTimeSeconds: captureStartTimeSeconds + captureSteps * eighthNoteSeconds,
+    phases,
+    targetTimes,
+    captureStartTimeSeconds: phases[0]?.startTimeSeconds ?? startTimeSeconds,
+    captureEndTimeSeconds: phases[phases.length - 1]?.endTimeSeconds ?? startTimeSeconds,
   };
 }
 
@@ -3027,7 +3975,7 @@ async function startCalibrationSequence() {
   const currentElapsed = getCurrentSessionElapsedSeconds();
   const currentAudioTime = context.currentTime;
   const { startBeatPosition, startTimeSeconds } = getCalibrationSequenceStart(currentElapsed);
-  const { sequence, captureStartTimeSeconds, captureEndTimeSeconds } =
+  const { sequence, phases, targetTimes, captureStartTimeSeconds, captureEndTimeSeconds } =
     buildCalibrationClickSequence(startBeatPosition, startTimeSeconds);
   const audioOffsetSeconds = Math.max(METRONOME_START_OFFSET_SECONDS, startTimeSeconds - currentElapsed);
 
@@ -3035,6 +3983,7 @@ async function startCalibrationSequence() {
   state.metronomeClicks = state.metronomeClicks.filter(
     (click) => click.timeSeconds <= currentElapsed + 0.002
   );
+  resetMetronomeIndicatorFlash();
   state.metronomeRunning = true;
   state.metronomeAudioZeroTime = currentAudioTime;
   state.metronomeElapsedBaseSeconds = currentElapsed;
@@ -3052,26 +4001,8 @@ async function startCalibrationSequence() {
     sequenceStartTimeSeconds: startTimeSeconds,
     collectStartTimeSeconds: captureStartTimeSeconds,
     collectEndTimeSeconds: captureEndTimeSeconds,
-  };
-}
-
-function getCalibrationTargetTimes(collectStartTimeSeconds) {
-  const targetTimes = [];
-  const targetIntervalSeconds = 60 / CALIBRATION_TEMPO / 2;
-  const captureDurationSeconds = CALIBRATION_CAPTURE_BARS * getCalibrationMeasureDurationSeconds();
-  const collectEndTimeSeconds = collectStartTimeSeconds + captureDurationSeconds;
-
-  for (
-    let targetTime = collectStartTimeSeconds;
-    targetTime < collectEndTimeSeconds - 0.0001;
-    targetTime += targetIntervalSeconds
-  ) {
-    targetTimes.push(Number(targetTime.toFixed(6)));
-  }
-
-  return {
+    phases,
     targetTimes,
-    collectEndTimeSeconds,
   };
 }
 
@@ -3092,30 +4023,144 @@ function classifyCalibrationQuality(usableHitCount, targetCount, madMs) {
   return "retry";
 }
 
+function getCalibrationBucket(id) {
+  return state.calibration.phaseSamples?.[id] ?? {
+    rawPeaks: [],
+    filteredPeaks: [],
+    hits: [],
+  };
+}
+
+function summarizeCalibrationStrengths(values) {
+  const filteredValues = values.filter((value) => Number.isFinite(value) && value > 0);
+  return {
+    count: filteredValues.length,
+    median: median(filteredValues),
+    p25: percentile(filteredValues, 0.25),
+    p75: percentile(filteredValues, 0.75),
+  };
+}
+
+function getCalibrationPhaseStrengthCandidates(phaseId, noiseFloor) {
+  return getPhasePeakCandidates(getCalibrationBucket(phaseId), noiseFloor)
+    .filter((value) => Number.isFinite(value) && value > 0);
+}
+
+function evaluateCalibrationDynamicResult() {
+  const noise = getCalibrationBucket("noise");
+  const noise95 = percentile(noise.filteredPeaks, 0.95) ?? 0;
+  const noise99 = percentile(noise.filteredPeaks, 0.99) ?? noise95;
+  const height3Peaks = getCalibrationPhaseStrengthCandidates("height-3", noise95);
+  const height6Peaks = getCalibrationPhaseStrengthCandidates("height-6", noise95);
+  const height9Peaks = getCalibrationPhaseStrengthCandidates("height-9", noise95);
+  const height12Peaks = getCalibrationPhaseStrengthCandidates("height-12", noise95);
+  const fastSoftPeaks = getCalibrationPhaseStrengthCandidates("fast-soft", noise95);
+  const fastLoudPeaks = getCalibrationPhaseStrengthCandidates("fast-loud", noise95);
+  const softCandidates = [...height3Peaks, ...fastSoftPeaks];
+  const loudCandidates = [...height12Peaks, ...fastLoudPeaks];
+  const soft25 = percentile(softCandidates, 0.25);
+  const softMedian = median(softCandidates);
+  const loudMedian = median(loudCandidates);
+  const fastIntervalsMs = [
+    ...getAutoDetectionHitIntervalsMs(getCalibrationBucket("fast-soft").hits),
+    ...getAutoDetectionHitIntervalsMs(getCalibrationBucket("fast-loud").hits),
+  ];
+  const fastestUsefulIntervalMs = percentile(fastIntervalsMs, 0.15);
+  const { min: thresholdMin, max: thresholdMax } = getRangeBounds(elements.thresholdInput);
+  const { min: refractoryMin, max: refractoryMax } = getRangeBounds(elements.refractoryInput);
+  const { min: smoothingMin, max: smoothingMax } = getRangeBounds(elements.smoothingInput);
+
+  const thresholdFromNoise = Math.max(noise99 * 2.4, noise95 * 3.2, thresholdMin);
+  const thresholdFromSoft = soft25 === null ? null : soft25 * 0.58;
+  const threshold = clamp(
+    Number(Math.max(thresholdFromNoise, thresholdFromSoft ?? thresholdFromNoise).toFixed(3)),
+    thresholdMin,
+    thresholdMax
+  );
+  const refractoryMs = clamp(
+    Math.round(
+      fastestUsefulIntervalMs === null
+        ? Number(elements.refractoryInput.value)
+        : Math.max(refractoryMin, fastestUsefulIntervalMs * 0.46)
+    ),
+    refractoryMin,
+    refractoryMax
+  );
+  const separationRatio =
+    softMedian === null || noise95 <= 0 ? Infinity : softMedian / Math.max(noise95, 0.000001);
+  const smoothing = clamp(
+    Number(
+      (
+        separationRatio < 3
+          ? 0.68
+          : separationRatio < 6
+            ? 0.5
+            : fastestUsefulIntervalMs !== null && fastestUsefulIntervalMs < 70
+              ? 0.28
+              : 0.38
+      ).toFixed(2)
+    ),
+    smoothingMin,
+    smoothingMax
+  );
+  const dynamicQuality =
+    softCandidates.length < 4
+      ? "retry"
+      : separationRatio < 2.2
+        ? "noisy"
+        : loudMedian !== null && softMedian !== null && loudMedian < softMedian * 1.25
+          ? "usable"
+          : "good";
+
+  return {
+    threshold,
+    refractoryMs,
+    smoothing,
+    dynamicQuality,
+    noiseFloor: noise95,
+    fastestUsefulIntervalMs,
+    dynamicCalibration: {
+      capturedAtIso: new Date().toISOString(),
+      noiseFloor: noise95,
+      threshold,
+      refractoryMs,
+      smoothing,
+      levels: {
+        "3in": summarizeCalibrationStrengths(height3Peaks),
+        "6in": summarizeCalibrationStrengths(height6Peaks),
+        "9in": summarizeCalibrationStrengths(height9Peaks),
+        "12in": summarizeCalibrationStrengths(height12Peaks),
+        fastSoft: summarizeCalibrationStrengths(fastSoftPeaks),
+        fastLoud: summarizeCalibrationStrengths(fastLoudPeaks),
+      },
+    },
+  };
+}
+
 function evaluateCalibrationResult() {
-  const targetIntervalSeconds = 60 / CALIBRATION_TEMPO / 2;
   const targetTimes = state.calibration.targetTimesSeconds;
   const calibrationHits = state.hits
     .slice(state.calibration.startHitIndex)
-    .map((hit) => hit.rawTimeSeconds)
     .filter(
-      (timeSeconds) =>
-        timeSeconds >= state.calibration.collectStartTimeSeconds - CALIBRATION_MATCH_WINDOW_MS / 1000 &&
-        timeSeconds <= state.calibration.collectEndTimeSeconds + CALIBRATION_MATCH_WINDOW_MS / 1000
+      (hit) =>
+        hit.rawTimeSeconds >= state.calibration.collectStartTimeSeconds - CALIBRATION_MATCH_WINDOW_MS / 1000 &&
+        hit.rawTimeSeconds <= state.calibration.collectEndTimeSeconds + CALIBRATION_MATCH_WINDOW_MS / 1000
     );
+  const dynamicResult = evaluateCalibrationDynamicResult();
 
   if (calibrationHits.length === 0) {
     return {
       offsetMs: null,
       madMs: null,
       quality: "retry",
+      timingQuality: "retry",
       usableHitCount: 0,
       targetCount: targetTimes.length,
       matches: [],
+      ...dynamicResult,
     };
   }
 
-  const windowSeconds = CALIBRATION_MATCH_WINDOW_MS / 1000;
   let bestCandidate = null;
 
   for (
@@ -3126,30 +4171,37 @@ function evaluateCalibrationResult() {
     const candidateOffsetSeconds = candidateOffsetMs / 1000;
     const matchesByIndex = new Map();
 
-    for (const hitTimeSeconds of calibrationHits) {
+    for (const hit of calibrationHits) {
+      const hitTimeSeconds = hit.rawTimeSeconds;
       const correctedTimeSeconds = hitTimeSeconds - candidateOffsetSeconds;
-      const rawIndex = Math.round(
-        (correctedTimeSeconds - state.calibration.collectStartTimeSeconds) / targetIntervalSeconds
-      );
+      let nearestIndex = -1;
+      let nearestResidualMs = Infinity;
+      targetTimes.forEach((target, targetIndex) => {
+        const residualMs = (correctedTimeSeconds - target.timeSeconds) * 1000;
+        if (Math.abs(residualMs) < Math.abs(nearestResidualMs)) {
+          nearestIndex = targetIndex;
+          nearestResidualMs = residualMs;
+        }
+      });
 
-      if (rawIndex < 0 || rawIndex >= targetTimes.length) {
+      if (nearestIndex < 0 || Math.abs(nearestResidualMs) > CALIBRATION_MATCH_WINDOW_MS) {
         continue;
       }
 
-      const targetTimeSeconds = targetTimes[rawIndex];
-      const residualMs = (correctedTimeSeconds - targetTimeSeconds) * 1000;
-      if (Math.abs(residualMs) > CALIBRATION_MATCH_WINDOW_MS) {
-        continue;
-      }
-
+      const target = targetTimes[nearestIndex];
+      const targetTimeSeconds = target.timeSeconds;
       const errorMs = (hitTimeSeconds - targetTimeSeconds) * 1000;
-      const existingMatch = matchesByIndex.get(rawIndex);
-      if (!existingMatch || Math.abs(residualMs) < Math.abs(existingMatch.residualMs)) {
-        matchesByIndex.set(rawIndex, {
+      const existingMatch = matchesByIndex.get(nearestIndex);
+      if (!existingMatch || Math.abs(nearestResidualMs) < Math.abs(existingMatch.residualMs)) {
+        matchesByIndex.set(nearestIndex, {
           targetTimeSeconds,
           hitTimeSeconds,
           errorMs,
-          residualMs,
+          residualMs: nearestResidualMs,
+          strength: hit.strength,
+          phaseId: target.phaseId,
+          dynamicLevel: target.dynamicLevel,
+          targetHeightInches: target.targetHeightInches,
         });
       }
     }
@@ -3188,14 +4240,22 @@ function evaluateCalibrationResult() {
     targetTimes.length,
     madMs ?? Infinity
   );
+  const combinedQuality =
+    quality === "retry" || dynamicResult.dynamicQuality === "retry"
+      ? "retry"
+      : quality === "good" && dynamicResult.dynamicQuality === "good"
+        ? "good"
+        : "usable";
 
   return {
     offsetMs,
     madMs,
-    quality,
+    quality: combinedQuality,
+    timingQuality: quality,
     usableHitCount: matches.length,
     targetCount: targetTimes.length,
     matches,
+    ...dynamicResult,
   };
 }
 
@@ -3205,20 +4265,21 @@ function getCalibrationProgressUiState() {
   const hasPendingResult = pendingResult !== null;
   const progressFraction = getCalibrationProgressFraction();
   const progressCircumference = getCalibrationProgressCircumference();
-  let progressLabelText = "Timing Calibration";
+  const totalSegments =
+    calibration.phases.length > 0 ? calibration.phases.length : SINGLE_CALIBRATION_PHASES.length;
+  const completedSegments = hasPendingResult
+    ? totalSegments
+    : calibration.active
+      ? calibration.phases.filter((phase) => getCurrentSessionElapsedSeconds() >= phase.endTimeSeconds).length
+      : 0;
+  let progressLabelText = "Calibration";
   let phaseValueText = "Awaiting start";
+  let segmentValueText = `${completedSegments}/${totalSegments}`;
 
   if (calibration.active && Number.isFinite(calibration.progressEndTimeSeconds)) {
-    progressLabelText =
-      Number.isFinite(calibration.collectStartTimeSeconds) &&
-      getCurrentSessionElapsedSeconds() < calibration.collectStartTimeSeconds
-        ? "Get ready to play 8ths"
-        : "Play 8ths";
-    phaseValueText =
-      Number.isFinite(calibration.collectStartTimeSeconds) &&
-      getCurrentSessionElapsedSeconds() < calibration.collectStartTimeSeconds
-        ? "Tap-off"
-        : "Listening";
+    const phase = getCurrentCalibrationPhaseAtTime();
+    progressLabelText = phase?.circleText ?? "Listening";
+    phaseValueText = phase ? getCalibrationNextPhaseText(phase) : "Finishing";
   } else if (hasPendingResult) {
     progressLabelText = "Review result";
     phaseValueText = "Review result";
@@ -3226,6 +4287,7 @@ function getCalibrationProgressUiState() {
 
   return {
     hasPendingResult,
+    segmentValueText,
     progressCircumference,
     progressFraction,
     progressLabelText,
@@ -3238,6 +4300,7 @@ function updateCalibrationProgressUi() {
     progressCircumference,
     progressFraction,
     progressLabelText,
+    segmentValueText,
     phaseValueText,
   } = getCalibrationProgressUiState();
 
@@ -3247,22 +4310,34 @@ function updateCalibrationProgressUi() {
   elements.calibrationProgressRing.style.strokeDashoffset = "0";
   elements.calibrationProgressValue.textContent = progressLabelText;
   elements.calibrationPhaseValue.textContent = phaseValueText;
+  elements.calibrationSegmentValue.textContent = segmentValueText;
+
+  if (state.calibration.active) {
+    const phase = getCurrentCalibrationPhaseAtTime();
+    if (phase) {
+      elements.calibrationStatusValue.textContent = phase.label;
+      elements.calibrationInstructionText.textContent = phase.instruction;
+      elements.calibrationScreenInstructionText.textContent = phase.instruction;
+    }
+  }
 }
 
 function updateCalibrationUi() {
   const calibration = state.calibration;
   const pendingResult = calibration.pendingResult;
   const hasPendingResult = pendingResult !== null;
+  const isActive = calibration.active;
+  const isSourceStep = calibration.overlayOpen && !isActive && !hasPendingResult;
   const defaultScreenInstruction =
-    "Press start, listen to the two-bar tap-off, then come in with steady eighth notes for the capture window. The app will use the selected audio source.";
+    "Press start, stay silent through the tap-off, then follow the guided 3 inch, 6 inch, 9 inch, 12 inch, minimum-volume roll, and full-volume speed phases. The debug graph stays live below.";
 
   elements.latencyCompensationValue.textContent =
     Math.abs(state.latencyCompensationMs) < 0.05
       ? "0.0 ms"
       : formatMilliseconds(state.latencyCompensationMs);
   elements.calibrationStatusValue.textContent = calibration.statusText;
+  elements.calibrationPanelStageValue.textContent = calibration.statusText;
   elements.calibrationInstructionText.textContent = calibration.instructions;
-  elements.calibrationScreenStatusValue.textContent = calibration.statusText;
   elements.calibrationScreenInstructionText.textContent =
     !calibration.active && !hasPendingResult && calibration.statusText === "Ready"
       ? defaultScreenInstruction
@@ -3277,25 +4352,41 @@ function updateCalibrationUi() {
     ? formatMilliseconds(pendingResult.madMs)
     : "--";
   elements.calibrationQualityValue.textContent = hasPendingResult
-    ? pendingResult.quality
+    ? `${pendingResult.quality} · detection ${pendingResult.dynamicQuality}`
     : "--";
   updateCalibrationProgressUi();
 
+  elements.calibrationScreen.classList.toggle("is-source-step", isSourceStep);
+  elements.calibrationScreen.classList.toggle("is-calibrating", isActive);
+  elements.calibrationScreen.classList.toggle("is-results", hasPendingResult);
+  elements.calibrationSourceGate.hidden = !isSourceStep;
+  elements.calibrationScreenBody.hidden = !isActive && !hasPendingResult;
+  elements.calibrationScreenBody.classList.toggle("has-results", hasPendingResult);
+  elements.calibrationScreenSide.hidden = !hasPendingResult;
+  elements.settingsDebugPanel.hidden = !isActive && !hasPendingResult;
   elements.startCalibrationButton.disabled = calibration.active;
-  elements.startCalibrationButton.textContent = hasPendingResult
-    ? "Review Timing Calibration"
-    : "Start Timing Calibration";
-  elements.acceptCalibrationButton.disabled =
-    !hasPendingResult || pendingResult.usableHitCount < CALIBRATION_MIN_USABLE_HITS;
+  elements.startCalibrationButton.replaceChildren(
+    Object.assign(document.createElement("span"), {
+      className: "calibration-start-title",
+      textContent: hasPendingResult ? "Review Calibration" : "Start Calibration",
+    }),
+    Object.assign(document.createElement("span"), {
+      className: "calibration-start-subtitle",
+      textContent: hasPendingResult
+        ? "Open the result screen to accept or discard this calibration."
+        : "Calibrates timing, dynamics, and detection accuracy.",
+    })
+  );
+  elements.acceptCalibrationButton.disabled = !hasPendingResult || pendingResult.quality === "retry";
   elements.discardCalibrationButton.disabled = !hasPendingResult;
   elements.resetCalibrationButton.disabled =
     calibration.active || Math.abs(state.latencyCompensationMs) < 0.05;
   elements.nudgeCalibrationBackButton.disabled = calibration.active;
   elements.nudgeCalibrationForwardButton.disabled = calibration.active;
   elements.clearLogButton.disabled = calibration.active;
-  elements.calibrationScreenStartButton.disabled = calibration.active || hasPendingResult;
+  elements.calibrationScreenStartButton.disabled =
+    calibration.active || hasPendingResult || !calibration.overlaySourceSelected;
   elements.calibrationScreenBackButton.disabled = calibration.finishing;
-  elements.calibrationScreenIdleActions.hidden = calibration.active || hasPendingResult;
   elements.calibrationScreenResults.hidden = !hasPendingResult;
 
   const calibrationControlsDisabled = calibration.active;
@@ -3304,6 +4395,7 @@ function updateCalibrationUi() {
   elements.metronomeSubdivisionSelect.disabled = calibrationControlsDisabled;
   elements.metronomeNumeratorInput.disabled = calibrationControlsDisabled;
   elements.metronomeDenominatorSelect.disabled = calibrationControlsDisabled;
+  elements.metronomeVolumeInput.disabled = calibrationControlsDisabled;
   elements.metronomeEnabledInput.disabled = calibrationControlsDisabled;
   elements.calibrationDeviceSelect.disabled = calibration.active || state.running;
   elements.metronomeAccentButtons.style.pointerEvents = calibrationControlsDisabled ? "none" : "auto";
@@ -3335,6 +4427,7 @@ async function finalizeCalibration() {
   const calibrationToken = state.calibration.token;
   state.calibration.finishing = true;
   const result = evaluateCalibrationResult();
+  await stopMetronome({ closeContext: true });
   await restoreCalibrationSettings();
   if (state.calibration.token !== calibrationToken) {
     return;
@@ -3343,13 +4436,13 @@ async function finalizeCalibration() {
   state.calibration.finishing = false;
   state.calibration.pendingResult = result;
   state.calibration.statusText =
-    result.usableHitCount >= CALIBRATION_MIN_USABLE_HITS
+    result.quality !== "retry"
       ? "Calibration captured"
       : "Calibration needs retry";
   state.calibration.instructions =
-    result.usableHitCount >= CALIBRATION_MIN_USABLE_HITS
-      ? "Review the proposed offset. Accept it to apply the correction, or discard to reset the screen."
-      : "Too few clean matches were captured. Discard and try again with steadier eighth notes.";
+    result.quality !== "retry"
+      ? `Review the proposed offset, threshold ${result.threshold.toFixed(3)}, ${result.refractoryMs} ms refractory, and smoothing ${result.smoothing.toFixed(2)}.`
+      : "The run did not capture enough clean timing or dynamic data. Discard and try again with clear stick-height contrast.";
   updateCalibrationUi();
 }
 
@@ -3362,9 +4455,12 @@ async function cancelCalibration() {
     state.calibration.pendingResult = null;
     state.calibration.statusText = "Ready";
     state.calibration.instructions =
-      "Press start, listen to the two-bar tap-off, then come in with steady eighth notes for the capture window.";
+      "Press start to run calibration with silence, stick heights, and fast taps.";
     state.calibration.progressStartTimeSeconds = null;
     state.calibration.progressEndTimeSeconds = null;
+    state.calibration.phases = [];
+    state.calibration.phaseSamples = null;
+    state.calibration.targetTimesSeconds = [];
     await stopMetronome({ closeContext: true });
     if (shouldStopCalibrationCapture) {
       await stopCapture({ finalizeExercise: false });
@@ -3380,6 +4476,9 @@ async function cancelCalibration() {
   state.calibration.startedCaptureForCalibration = false;
   state.calibration.progressStartTimeSeconds = null;
   state.calibration.progressEndTimeSeconds = null;
+  state.calibration.phases = [];
+  state.calibration.phaseSamples = null;
+  state.calibration.targetTimesSeconds = [];
   await stopMetronome({ closeContext: true });
   await restoreCalibrationSettings();
   if (shouldStopCalibrationCapture) {
@@ -3387,7 +4486,7 @@ async function cancelCalibration() {
   }
   state.calibration.statusText = "Calibration cancelled";
   state.calibration.instructions =
-    "Calibration was cancelled. Press start to run the tap-off and capture again.";
+    "Calibration was cancelled. Press start to run calibration again.";
   updateCalibrationUi();
 }
 
@@ -3400,19 +4499,33 @@ async function acceptCalibration() {
   const shouldStopCalibrationCapture =
     state.calibration.startedCaptureForCalibration && state.running && !state.exercise.running;
   state.calibration.startedCaptureForCalibration = false;
+  if (Number.isFinite(pendingResult.threshold)) {
+    elements.thresholdInput.value = String(pendingResult.threshold);
+  }
+  if (Number.isFinite(pendingResult.refractoryMs)) {
+    elements.refractoryInput.value = String(pendingResult.refractoryMs);
+  }
+  if (Number.isFinite(pendingResult.smoothing)) {
+    elements.smoothingInput.value = String(pendingResult.smoothing);
+  }
+  state.dynamicCalibration = pendingResult.dynamicCalibration ?? null;
+  updateDetectorFromControls();
   setLatencyCompensationMs(pendingResult.offsetMs ?? 0);
   state.appStats.totalCalibrationsCompleted += 1;
   saveAppStats();
   state.calibration.pendingResult = null;
   state.calibration.progressStartTimeSeconds = null;
   state.calibration.progressEndTimeSeconds = null;
+  state.calibration.phases = [];
+  state.calibration.phaseSamples = null;
+  state.calibration.targetTimesSeconds = [];
   await stopMetronome({ closeContext: true });
   if (shouldStopCalibrationCapture) {
     await stopCapture({ finalizeExercise: false });
   }
   state.calibration.statusText = "Calibration applied";
   state.calibration.instructions =
-    "Latency compensation is active. The timeline, BPM estimate, and export now use corrected hit timing.";
+    "Latency, detection sensitivity, fast-hit handling, and dynamic level references are active.";
   closeCalibrationOverlay();
   updateCalibrationUi();
 }
@@ -3429,13 +4542,16 @@ async function discardCalibration() {
   state.calibration.pendingResult = null;
   state.calibration.progressStartTimeSeconds = null;
   state.calibration.progressEndTimeSeconds = null;
+  state.calibration.phases = [];
+  state.calibration.phaseSamples = null;
+  state.calibration.targetTimesSeconds = [];
   await stopMetronome({ closeContext: true });
   if (shouldStopCalibrationCapture) {
     await stopCapture({ finalizeExercise: false });
   }
   state.calibration.statusText = "Ready";
   state.calibration.instructions =
-    "Press start, listen to the two-bar tap-off, then come in with steady eighth notes for the capture window.";
+    "Press start to run calibration with silence, stick heights, and fast taps.";
   updateCalibrationUi();
 }
 
@@ -3444,7 +4560,7 @@ function resetCalibrationOffset() {
   state.calibration.pendingResult = null;
   state.calibration.statusText = "Compensation reset";
   state.calibration.instructions =
-    "Latency compensation is back at 0 ms. Start calibration again if you want to measure a new offset.";
+    "Latency compensation is back at 0 ms. Start calibration again if you want to measure a new full setup.";
   updateCalibrationUi();
 }
 
@@ -3474,10 +4590,12 @@ async function startCalibration() {
   state.calibration.collectEndTimeSeconds = Number.POSITIVE_INFINITY;
   state.calibration.progressStartTimeSeconds = null;
   state.calibration.progressEndTimeSeconds = null;
+  state.calibration.phases = [];
+  state.calibration.phaseSamples = createCalibrationPhaseSamples();
   state.calibration.targetTimesSeconds = [];
   state.calibration.statusText = "Preparing calibration";
-  state.calibration.instructions =
-    "The tap-off is loading. Listen for the two-bar count-in, then come in with steady eighth notes.";
+    state.calibration.instructions =
+      "The tap-off is loading. Stay silent first, then follow each stick-height and fast-tap instruction.";
   updateCalibrationUi();
 
   try {
@@ -3486,9 +4604,14 @@ async function startCalibration() {
     }
 
     if (!state.running) {
-      const selectedDevice = elements.calibrationDeviceSelect.value || elements.deviceSelect.value;
+      let selectedDevice = elements.calibrationDeviceSelect.value || elements.deviceSelect.value;
       if (selectedDevice === "simulated") {
-        throw new Error("Calibration needs a real audio input. Select your Mac microphone input, then try again.");
+        const realInputValue = getFirstRealAudioInputValue(elements.calibrationDeviceSelect);
+        if (!realInputValue) {
+          throw new Error("Calibration needs a real audio input. Select your Mac microphone input, then try again.");
+        }
+        selectedDevice = realInputValue;
+        syncAudioDeviceSelection(selectedDevice);
       }
 
       await startLiveCapture(selectedDevice, {
@@ -3525,19 +4648,21 @@ async function startCalibration() {
       sequenceStartTimeSeconds,
       collectStartTimeSeconds,
       collectEndTimeSeconds,
+      phases,
+      targetTimes,
     } = await startCalibrationSequence();
-    const { targetTimes } = getCalibrationTargetTimes(collectStartTimeSeconds);
 
     state.calibration.firstClickTimeSeconds = sequenceStartTimeSeconds;
     state.calibration.collectStartTimeSeconds = collectStartTimeSeconds;
     state.calibration.collectEndTimeSeconds = collectEndTimeSeconds;
     state.calibration.progressStartTimeSeconds = sequenceStartTimeSeconds;
     state.calibration.progressEndTimeSeconds = collectEndTimeSeconds;
+    state.calibration.phases = phases;
     state.calibration.targetTimesSeconds = targetTimes;
     state.calibration.startHitIndex = state.hits.length;
     state.calibration.statusText = "Calibration listening";
     state.calibration.instructions =
-      "Listen to the tap-off, then play steady eighth notes until the ring completes.";
+      "Stay silent through the tap-off, then follow the instruction inside the progress ring.";
     updateCalibrationUi();
   } catch (error) {
     if (state.calibration.token === calibrationToken) {
@@ -3547,6 +4672,9 @@ async function startCalibration() {
       state.calibration.pendingResult = null;
       state.calibration.progressStartTimeSeconds = null;
       state.calibration.progressEndTimeSeconds = null;
+      state.calibration.phases = [];
+      state.calibration.phaseSamples = null;
+      state.calibration.targetTimesSeconds = [];
       await restoreCalibrationSettings();
       if (startedCaptureForCalibration) {
         state.calibration.startedCaptureForCalibration = false;
@@ -3704,10 +4832,13 @@ function clearSessionData({ resetDetector = true } = {}) {
   state.calibration.pendingResult = null;
   state.calibration.progressStartTimeSeconds = null;
   state.calibration.progressEndTimeSeconds = null;
+  state.calibration.phases = [];
+  state.calibration.phaseSamples = null;
+  state.calibration.targetTimesSeconds = [];
   if (!state.calibration.active) {
     state.calibration.statusText = "Ready";
     state.calibration.instructions =
-      "Open the calibration screen during a live session to run the guided latency check.";
+      "Select an audio source, then open the calibration screen.";
   }
   state.hits = [];
   state.metronomeClicks = [];
@@ -3801,6 +4932,7 @@ function processChunk(samples, { exerciseSessionId = null } = {}) {
   collectAutoDetectionSamples(samples);
   const result = state.detector.processChunk(samples);
   state.lastMetrics = result.metrics;
+  collectCalibrationPhaseSamples(result);
 
   if (state.autoDetection.active && state.autoDetection.startedCaptureForAutoTune) {
     return;
@@ -3809,6 +4941,85 @@ function processChunk(samples, { exerciseSessionId = null } = {}) {
   for (const hit of result.hits) {
     recordHit(hit, { exerciseSessionId });
   }
+}
+
+function createCalibrationPhaseSamples(phases = SINGLE_CALIBRATION_PHASES) {
+  return Object.fromEntries(
+    phases.map((phase) => [
+      phase.id,
+      {
+        rawPeaks: [],
+        filteredPeaks: [],
+        hits: [],
+      },
+    ])
+  );
+}
+
+function getCurrentCalibrationPhaseAtTime(timeSeconds = getCurrentSessionElapsedSeconds()) {
+  return state.calibration.phases.find(
+    (phase) => timeSeconds >= phase.startTimeSeconds && timeSeconds < phase.endTimeSeconds
+  ) ?? null;
+}
+
+function getCalibrationNextPhaseText(currentPhase) {
+  const currentIndex = state.calibration.phases.findIndex((phase) => phase.id === currentPhase.id);
+  const nextPhase = currentIndex >= 0 ? state.calibration.phases[currentIndex + 1] : null;
+  if (!nextPhase) {
+    return "Final phase";
+  }
+
+  switch (nextPhase.id) {
+    case "height-3":
+      return "Next: play 3 inch eighths";
+    case "height-6":
+      return "Next: play 6 inch eighths";
+    case "height-9":
+      return "Next: play 9 inch eighths";
+    case "height-12":
+      return "Next: play 12 inch eighths";
+    case "roll-prep":
+      return "Next: get ready for the quiet double-stroke roll";
+    case "fast-soft":
+      return "Next: very quiet double-stroke roll";
+    case "fast-loud":
+      return "Next: play fast at full volume";
+    default:
+      return `Next: ${nextPhase.label}`;
+  }
+}
+
+function collectCalibrationPhaseSamples(result) {
+  const calibration = state.calibration;
+  if (!calibration.active || !calibration.phaseSamples) {
+    return;
+  }
+
+  const currentElapsed = getCurrentSessionElapsedSeconds();
+  const phase = getCurrentCalibrationPhaseAtTime(currentElapsed);
+  if (!phase) {
+    return;
+  }
+
+  const bucket = calibration.phaseSamples[phase.id];
+  if (!bucket) {
+    return;
+  }
+
+  bucket.rawPeaks.push(Number(result.metrics.rawPeak) || 0);
+  bucket.filteredPeaks.push(Number(result.metrics.filteredPeak) || 0);
+  result.hits.forEach((hit) => {
+    const hitPhase = getCurrentCalibrationPhaseAtTime(hit.timeSeconds);
+    const hitBucket = hitPhase ? calibration.phaseSamples[hitPhase.id] : null;
+    if (!hitBucket) {
+      return;
+    }
+
+    hitBucket.hits.push({
+      timeSeconds: hit.timeSeconds,
+      strength: Number(hit.strength) || 0,
+    });
+  });
 }
 
 function updateDetectorFromControls() {
@@ -4035,6 +5246,11 @@ async function stopAutoDetectionCaptureIfNeeded() {
   }
 }
 
+function updateMetronomeVolumeFromControl() {
+  updateControlLabels();
+  saveDetectionSettings();
+}
+
 async function cancelAutoDetectionCalibration() {
   state.autoDetection.token += 1;
   state.autoDetection.active = false;
@@ -4197,6 +5413,7 @@ function resetDetectionDefaults() {
   elements.thresholdInput.value = "0.005";
   elements.refractoryInput.value = "20";
   elements.smoothingInput.value = "0.58";
+  elements.metronomeVolumeInput.value = "80";
   updateDetectorFromControls();
   state.autoDetection.pendingResult = null;
   state.autoDetection.statusText = "Defaults restored";
@@ -4253,6 +5470,12 @@ async function refreshDeviceList() {
     elements.autoTuneDeviceSelect.append(option.cloneNode(true));
   }
 
+  const calibrationPlaceholderOption = document.createElement("option");
+  calibrationPlaceholderOption.value = "";
+  calibrationPlaceholderOption.textContent = "Select an audio source...";
+  calibrationPlaceholderOption.disabled = true;
+  elements.calibrationDeviceSelect.prepend(calibrationPlaceholderOption);
+
   const desiredValue = Array.from(elements.deviceSelect.options).some(
     (option) => option.value === previousSelection
   )
@@ -4263,6 +5486,7 @@ async function refreshDeviceList() {
   elements.exerciseDeviceSelect.value = desiredValue;
   elements.calibrationDeviceSelect.value = desiredValue;
   elements.autoTuneDeviceSelect.value = desiredValue;
+  updateCalibrationUi();
 }
 
 async function ensureMetronomeContext() {
@@ -4284,6 +5508,7 @@ async function ensureMetronomeContext() {
 function scheduleMetronomeClickAudio(context, audioTime, accentLevel) {
   const oscillator = context.createOscillator();
   const gainNode = context.createGain();
+  const outputVolume = getMetronomeVolume();
   const tones = [
     { type: "sine", frequency: 1180, gain: 0.11 },
     { type: "triangle", frequency: 1560, gain: 0.18 },
@@ -4294,7 +5519,7 @@ function scheduleMetronomeClickAudio(context, audioTime, accentLevel) {
   oscillator.frequency.setValueAtTime(tone.frequency, audioTime);
 
   gainNode.gain.setValueAtTime(0.0001, audioTime);
-  gainNode.gain.exponentialRampToValueAtTime(tone.gain, audioTime + 0.002);
+  gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, tone.gain * outputVolume), audioTime + 0.002);
   gainNode.gain.exponentialRampToValueAtTime(0.0001, audioTime + 0.05);
 
   oscillator.connect(gainNode);
@@ -4371,6 +5596,7 @@ async function startMetronome(startElapsedOverride = null) {
   const tempo = getMetronomeTempo();
   const timeSignature = getTimeSignature();
   const positions = getMeasureSubdivisionPositions();
+  resetMetronomeIndicatorFlash();
   state.metronomeRunning = true;
 
   const isFreshSimulatedSession =
@@ -4423,8 +5649,7 @@ async function stopMetronome({ closeContext = false } = {}) {
   state.metronomeRunning = false;
   state.metronomeAudioZeroTime = null;
   state.metronomeElapsedBaseSeconds = 0;
-  elements.metronomeIndicator.classList.remove("active");
-  window.clearTimeout(state.metronomeFlashTimeout);
+  resetMetronomeIndicatorFlash();
 
   if (closeContext && state.metronomeContext) {
     const context = state.metronomeContext;
@@ -4440,6 +5665,7 @@ function stopExerciseGuide() {
   window.clearInterval(state.exercise.guideTimer);
   state.exercise.guideTimer = null;
   state.exercise.guideNextIndex = 0;
+  state.exercise.guideAudioStartTime = null;
 }
 
 function clearExerciseCompletionTimer() {
@@ -4477,8 +5703,7 @@ function stopExerciseListen({ keepCursor = false } = {}) {
   state.exercise.listenStartPerformanceMs = null;
   state.exercise.listenScoreStartTimeSeconds = 0;
   state.exercise.listenEndTimeSeconds = 0;
-  elements.metronomeIndicator.classList.remove("active");
-  window.clearTimeout(state.metronomeFlashTimeout);
+  resetMetronomeIndicatorFlash();
   if (!keepCursor) {
     hideExerciseSheetCursor();
   }
@@ -4496,15 +5721,29 @@ function scheduleExerciseGuide(expectedGuideToken = state.exercise.guideToken) {
     return;
   }
 
-  const currentElapsed = getCurrentSessionElapsedSeconds();
+  const guideAudioStartTime = state.exercise.guideAudioStartTime;
+  const currentElapsed = Number.isFinite(guideAudioStartTime)
+    ? Math.max(0, state.metronomeContext.currentTime - guideAudioStartTime)
+    : getCurrentSessionElapsedSeconds();
+  const nextEvent = state.exercise.guideEvents[state.exercise.guideNextIndex];
+  const isSchedulingCountIn = nextEvent?.type === "count-in";
+  const lookaheadSeconds = isSchedulingCountIn
+    ? Math.max(EXERCISE_GUIDE_LOOKAHEAD_SECONDS, state.exercise.scoreStartTimeSeconds + 0.08)
+    : EXERCISE_GUIDE_LOOKAHEAD_SECONDS;
   while (
     state.exercise.guideNextIndex < state.exercise.guideEvents.length &&
     state.exercise.guideEvents[state.exercise.guideNextIndex].timeSeconds <
-      currentElapsed + EXERCISE_GUIDE_LOOKAHEAD_SECONDS
+      currentElapsed + lookaheadSeconds
   ) {
     const event = state.exercise.guideEvents[state.exercise.guideNextIndex];
-    const audioTime =
-      state.metronomeContext.currentTime + Math.max(0.004, event.timeSeconds - currentElapsed);
+    if (isSchedulingCountIn && event.type !== "count-in") {
+      break;
+    }
+
+    const plannedAudioTime = Number.isFinite(guideAudioStartTime)
+      ? guideAudioStartTime + event.timeSeconds
+      : state.metronomeContext.currentTime + Math.max(0.004, event.timeSeconds - currentElapsed);
+    const audioTime = Math.max(state.metronomeContext.currentTime + 0.004, plannedAudioTime);
     scheduleMetronomeClickAudio(state.metronomeContext, audioTime, event.accentLevel);
     state.exercise.guideNextIndex += 1;
   }
@@ -4550,7 +5789,7 @@ function buildExerciseMetronomeGuideEvents(exercise, scoreStartTimeSeconds) {
     return [];
   }
 
-  const tempo = getMetronomeTempo();
+  const tempo = exercise.tempoBpm;
   const secondsPerBeat = 60 / tempo;
   const positions = getMeasureSubdivisionPositions();
   const accentLevels =
@@ -4578,6 +5817,20 @@ function buildExerciseMetronomeGuideEvents(exercise, scoreStartTimeSeconds) {
   }
 
   return events;
+}
+
+function getExerciseTapOffConfig(exercise) {
+  if (TRIPLET_TAP_OFF_EXERCISE_IDS.has(exercise?.id)) {
+    return {
+      pattern: TRIPLET_TAP_OFF_PATTERN,
+      stepBeats: 1 / 3,
+    };
+  }
+
+  return {
+    pattern: CALIBRATION_TAP_OFF_PATTERN,
+    stepBeats: 0.5,
+  };
 }
 
 function scheduleExerciseListen() {
@@ -4659,9 +5912,11 @@ function prepareExerciseSession() {
     throw new Error("Load an exercise first.");
   }
 
+  const tapOffConfig = getExerciseTapOffConfig(exercise);
   const clickPlan = buildExerciseClickEvents(exercise, {
     startDelaySeconds: EXERCISE_START_DELAY_SECONDS,
-    tapOffPattern: CALIBRATION_TAP_OFF_PATTERN,
+    tapOffPattern: tapOffConfig.pattern,
+    tapOffStepBeats: tapOffConfig.stepBeats,
   });
   const exercisePlaybackEvents = elements.exerciseGuideEnabledInput.checked
     ? clickPlan.expectedClicks
@@ -4692,7 +5947,6 @@ function prepareExerciseSession() {
       bpm: exercise.tempoBpm,
     },
   ];
-  initializeSessionClock();
   updateStats();
   resetExerciseResultsUi();
   setExerciseRepStatus("Count-in");
@@ -4833,8 +6087,6 @@ async function startExerciseSession() {
       updateExerciseCaptureUi();
       return;
     }
-    state.running = true;
-    state.exercise.running = true;
     state.suppressTimelineScrollEvent = true;
     state.exercise.suppressTimelineScrollEvent = true;
     elements.timelineScroll.scrollLeft = 0;
@@ -4859,14 +6111,28 @@ async function startExerciseSession() {
       return;
     }
 
+    const guideContext = await ensureMetronomeContext();
+    await guideContext.resume();
+    if (exerciseSessionId !== state.exercise.sessionId) {
+      await stopCapture({ finalizeExercise: false, exerciseSessionId });
+      state.exercise.starting = false;
+      if (state.exercise.activeSessionId === exerciseSessionId) {
+        state.exercise.activeSessionId = null;
+      }
+      updateExerciseCaptureUi();
+      return;
+    }
+
+    initializeSessionClock();
+    state.exercise.guideAudioStartTime = guideContext.currentTime;
+    state.running = true;
+    state.exercise.running = true;
     updateCaptureStatus("Running exercise rep");
     state.exercise.starting = false;
     setRunningUi(true);
     updateExerciseCaptureUi();
     setMessage("Exercise rep is active. Listen to the count-in, then play the written rhythm.", false);
-    void startExerciseGuide().catch((error) => {
-      setMessage(`Exercise capture is running, but guide audio could not start: ${error.message}`);
-    });
+    await startExerciseGuide();
     clearExerciseCompletionTimer();
     const completionDelayMs = Math.max(
       0,
@@ -6166,6 +7432,183 @@ function drawExerciseOffsetGraph() {
   context.restore();
 }
 
+function drawExerciseDynamicsGraph() {
+  const canvas = elements.exerciseDynamicsCanvas;
+  const exercise = state.exercise.loaded;
+  if (!elements.exerciseDynamicsPanel.open || !canvas || !exercise) {
+    return;
+  }
+
+  const container = canvas.parentElement;
+  const width = Math.max(320, getElementContentWidth(container, canvas.clientWidth || 720));
+  const height = EXERCISE_DYNAMICS_GRAPH_HEIGHT;
+  const context = resizeCanvasToCssPixels(canvas, width, height);
+  const padding = { left: 54, right: 18, top: 22, bottom: 38 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const baselineY = padding.top + plotHeight;
+  const totalBeats = Math.max(1, Number(exercise.totalQuarterBeats) || 1);
+  const beatToX = (beatPosition) =>
+    padding.left + (clamp(Number(beatPosition) || 0, 0, totalBeats) / totalBeats) * plotWidth;
+
+  const dynamicsPoints = state.hits
+    .map((hit) => {
+      const exerciseBeat =
+        ((hit.timeSeconds - state.exercise.scoreStartTimeSeconds) * exercise.tempoBpm) / 60;
+      return {
+        beatPosition: exerciseBeat,
+        strength: Number(hit.strength) || 0,
+      };
+    })
+    .filter(
+      (point) =>
+        Number.isFinite(point.beatPosition) &&
+        point.beatPosition >= -0.001 &&
+        point.beatPosition <= totalBeats + 0.001 &&
+        point.strength > 0
+    )
+    .sort((left, right) => left.beatPosition - right.beatPosition);
+  const strengths = dynamicsPoints.map((point) => point.strength);
+  const maxObservedStrength = strengths.length ? Math.max(...strengths) : 0;
+  const scaleMax = Math.max(
+    0.08,
+    maxObservedStrength * 1.06,
+    (percentile(strengths, 0.92) ?? 0) * 1.18
+  );
+  const strengthToY = (strength) =>
+    baselineY - (clamp(strength / scaleMax, 0, 1) * plotHeight);
+
+  context.clearRect(0, 0, width, height);
+  const panelGradient = context.createLinearGradient(0, padding.top, 0, baselineY);
+  panelGradient.addColorStop(0, "rgba(115, 224, 169, 0.08)");
+  panelGradient.addColorStop(1, "rgba(138, 232, 243, 0.025)");
+  context.fillStyle = panelGradient;
+  context.fillRect(padding.left, padding.top, plotWidth, plotHeight);
+
+  const measureBeats = Math.max(1, exercise.timeSignature?.numerator ?? 4);
+  for (let beat = 0; beat <= totalBeats + 0.0001; beat += 1) {
+    const x = beatToX(beat);
+    const isMeasure = Math.abs(beat % measureBeats) < 0.0001;
+    context.strokeStyle = isMeasure ? "rgba(255,255,255,0.13)" : "rgba(255,255,255,0.055)";
+    context.lineWidth = isMeasure ? 1.2 : 1;
+    context.beginPath();
+    context.moveTo(x, padding.top);
+    context.lineTo(x, baselineY);
+    context.stroke();
+  }
+
+  for (const percent of [0, 0.5, 1]) {
+    const y = baselineY - percent * plotHeight;
+    context.strokeStyle = percent === 0 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.08)";
+    context.lineWidth = percent === 0 ? 1.5 : 1;
+    context.beginPath();
+    context.moveTo(padding.left, y);
+    context.lineTo(width - padding.right, y);
+    context.stroke();
+    context.fillStyle = "rgba(243, 247, 251, 0.58)";
+    context.font = "11px Avenir Next, sans-serif";
+    context.textAlign = "right";
+    context.fillText(`${Math.round(percent * 100)}%`, padding.left - 8, y + 4);
+  }
+
+  for (const expected of exercise.expectedHits) {
+    const x = beatToX(expected.beatPosition);
+    const accentLevel = clamp(expected.accentLevel ?? 0, 0, 2);
+    const guideRatio = [0.32, 0.58, 0.9][accentLevel];
+    const guideTopY = baselineY - guideRatio * plotHeight;
+    context.strokeStyle = ["rgba(255, 209, 138, 0.10)", "rgba(255, 209, 138, 0.16)", "rgba(255, 184, 107, 0.24)"][accentLevel];
+    context.lineWidth = [1, 1.6, 2.2][accentLevel];
+    context.beginPath();
+    context.moveTo(x, baselineY);
+    context.lineTo(x, guideTopY);
+    context.stroke();
+  }
+
+  if (dynamicsPoints.length === 0) {
+    context.fillStyle = "rgba(243, 247, 251, 0.62)";
+    context.textAlign = "center";
+    context.font = "13px Avenir Next, sans-serif";
+    context.fillText("Dynamics appear here as hits are detected during a rep.", width / 2, height / 2);
+  } else {
+    const plottedPoints = dynamicsPoints.map((point) => ({
+      x: beatToX(point.beatPosition),
+      y: strengthToY(point.strength),
+      strength: point.strength,
+    }));
+    const areaGradient = context.createLinearGradient(0, padding.top, 0, baselineY);
+    areaGradient.addColorStop(0, "rgba(115, 224, 169, 0.24)");
+    areaGradient.addColorStop(1, "rgba(115, 224, 169, 0.015)");
+
+    context.beginPath();
+    plottedPoints.forEach((point, index) => {
+      if (index === 0) {
+        context.moveTo(point.x, baselineY);
+        context.lineTo(point.x, point.y);
+      } else {
+        context.lineTo(point.x, point.y);
+      }
+    });
+    context.lineTo(plottedPoints[plottedPoints.length - 1].x, baselineY);
+    context.closePath();
+    context.fillStyle = areaGradient;
+    context.fill();
+
+    context.strokeStyle = "rgba(115, 224, 169, 0.9)";
+    context.lineWidth = 2.6;
+    context.shadowColor = "rgba(115, 224, 169, 0.24)";
+    context.shadowBlur = 10;
+    context.lineJoin = "round";
+    context.beginPath();
+    plottedPoints.forEach((point, index) => {
+      if (index === 0) {
+        context.moveTo(point.x, point.y);
+      } else {
+        const previous = plottedPoints[index - 1];
+        const midX = (previous.x + point.x) / 2;
+        context.quadraticCurveTo(previous.x, previous.y, midX, (previous.y + point.y) / 2);
+        context.quadraticCurveTo(point.x, point.y, point.x, point.y);
+      }
+    });
+    context.stroke();
+    context.shadowBlur = 0;
+
+    const averageStrength =
+      strengths.reduce((total, strength) => total + strength, 0) / Math.max(1, strengths.length);
+    const averageY = strengthToY(averageStrength);
+    context.setLineDash([5, 5]);
+    context.strokeStyle = "rgba(138, 232, 243, 0.42)";
+    context.lineWidth = 1.4;
+    context.beginPath();
+    context.moveTo(padding.left, averageY);
+    context.lineTo(width - padding.right, averageY);
+    context.stroke();
+    context.setLineDash([]);
+
+    for (const point of plottedPoints) {
+      drawTimelineMarker(context, point.x, point.y, 4.2, "rgba(115, 224, 169, 0.95)");
+    }
+
+    context.fillStyle = "rgba(243, 247, 251, 0.64)";
+    context.textAlign = "right";
+    context.font = "12px Avenir Next, sans-serif";
+    context.fillText(
+      `Peak ${Math.round((maxObservedStrength / scaleMax) * 100)}% of graph range`,
+      width - padding.right,
+      padding.top - 6
+    );
+  }
+
+  context.fillStyle = "rgba(243, 247, 251, 0.66)";
+  context.font = "12px Avenir Next, sans-serif";
+  context.textAlign = "center";
+  context.fillText("Beat position", padding.left + plotWidth / 2, height - 10);
+  context.save();
+  context.translate(15, padding.top + plotHeight / 2);
+  context.rotate(-Math.PI / 2);
+  context.fillText("Relative strength", 0, 0);
+  context.restore();
+}
+
 function renderFrame() {
   state.animationFrameId = 0;
   updateCalibrationProgress();
@@ -6173,11 +7616,14 @@ function renderFrame() {
   updateAutoDetectionCalibration();
   updateExerciseSheetProgress();
   updateExerciseReadyPrompt();
+  drawInlineExerciseTendencies();
+  drawInlineExerciseDynamics();
   drawBeatTimeline();
   drawExerciseTimeline();
   drawExerciseOffsetGraph();
+  drawExerciseDynamicsGraph();
   if (!elements.repGraphOverlay.hidden && state.activeRepGraphRecord) {
-    drawStoredRepGraph(state.activeRepGraphRecord);
+    drawActiveRepGraph();
   }
   if (!elements.exerciseHeatmapOverlay.hidden && state.activeHeatmap) {
     drawExerciseHeatmap();
@@ -6320,7 +7766,7 @@ elements.startCalibrationButton.addEventListener("click", () => {
 });
 
 elements.startAutoTuneButton.addEventListener("click", () => {
-  openAutoTuneOverlay();
+  openCalibrationOverlay();
 });
 
 elements.acceptCalibrationButton.addEventListener("click", () => {
@@ -6396,7 +7842,9 @@ elements.exerciseDeviceSelect.addEventListener("change", () => {
 });
 
 elements.calibrationDeviceSelect.addEventListener("change", () => {
+  state.calibration.overlaySourceSelected = true;
   syncAudioDeviceSelection(elements.calibrationDeviceSelect.value);
+  updateCalibrationUi();
 });
 
 elements.autoTuneDeviceSelect.addEventListener("change", () => {
@@ -6464,8 +7912,30 @@ elements.exerciseListenButton.addEventListener("click", () => {
   void startExerciseListen();
 });
 
-elements.exerciseHeatmapButton.addEventListener("click", () => {
-  openExerciseHeatmapOverlay();
+elements.exerciseTendenciesButton.addEventListener("click", () => {
+  if (elements.exerciseTendenciesButton.disabled) {
+    return;
+  }
+
+  state.exercise.tendenciesVisible = !state.exercise.tendenciesVisible;
+  updateExerciseTendenciesButton();
+  if (!state.exercise.tendenciesVisible) {
+    clearInlineExerciseTendencies();
+  }
+  requestRender();
+});
+
+elements.exerciseDynamicsToggleButton.addEventListener("click", () => {
+  if (elements.exerciseDynamicsToggleButton.disabled) {
+    return;
+  }
+
+  state.exercise.dynamicsVisible = !state.exercise.dynamicsVisible;
+  updateExerciseDynamicsToggleButton();
+  if (!state.exercise.dynamicsVisible) {
+    clearInlineExerciseDynamics();
+  }
+  requestRender();
 });
 
 elements.exerciseStopButton.addEventListener("click", () => {
@@ -6480,6 +7950,10 @@ elements.exerciseOffsetPanel.addEventListener("toggle", () => {
   updateExercisePanelVisibility();
 });
 
+elements.exerciseDynamicsPanel.addEventListener("toggle", () => {
+  updateExercisePanelVisibility();
+});
+
 elements.exerciseGuideToggleButton.addEventListener("click", () => {
   if (elements.exerciseGuideToggleButton.disabled) {
     return;
@@ -6489,15 +7963,24 @@ elements.exerciseGuideToggleButton.addEventListener("click", () => {
   updateExerciseGuideToggleUi();
 });
 
+elements.exerciseStatsList.addEventListener("click", (event) => {
+  const tendenciesButton = event.target.closest("button[data-exercise-tendencies-id]");
+  if (!tendenciesButton) {
+    return;
+  }
+
+  void openExerciseHeatmapOverlayForExercise(tendenciesButton.dataset.exerciseTendenciesId);
+});
+
 elements.sessionHistoryList.addEventListener("click", (event) => {
-  const graphButton = event.target.closest("button[data-rep-id]");
+  const graphButton = event.target.closest("button[data-rep-id][data-rep-graph-type]");
   if (!graphButton) {
     return;
   }
 
   const record = state.exercise.repHistory.find((rep) => rep.id === graphButton.dataset.repId);
   if (record) {
-    openRepGraphOverlay(record);
+    openRepGraphOverlay(record, graphButton.dataset.repGraphType);
   }
 });
 
@@ -6506,7 +7989,9 @@ elements.clearRepHistoryButton.addEventListener("click", () => {
   saveExerciseRepHistory();
   renderSessionHistory();
   renderStatsPage();
-  updateExerciseHeatmapButton();
+  updateExerciseTendenciesButton();
+  updateExerciseDynamicsToggleButton();
+  requestRender();
 });
 
 elements.exerciseResultOverlay.addEventListener("click", () => {
@@ -6538,15 +8023,15 @@ elements.exerciseHeatmapCloseButton.addEventListener("click", (event) => {
   closeExerciseHeatmapOverlay();
 });
 
-elements.exerciseHeatmapCanvas.addEventListener("click", (event) => {
+elements.exerciseHeatmapMarkerLayer.addEventListener("click", (event) => {
   event.stopPropagation();
   const marker = getHeatmapMarkerAtEvent(event);
   setHeatmapDetails(marker?.target ?? null);
 });
 
-elements.exerciseHeatmapCanvas.addEventListener("mousemove", (event) => {
+elements.exerciseHeatmapMarkerLayer.addEventListener("mousemove", (event) => {
   const marker = getHeatmapMarkerAtEvent(event);
-  elements.exerciseHeatmapCanvas.style.cursor = marker ? "pointer" : "default";
+  elements.exerciseHeatmapMarkerLayer.style.cursor = marker ? "pointer" : "default";
 });
 
 elements.timelineScroll.addEventListener("scroll", () => {
@@ -6597,6 +8082,10 @@ document.addEventListener("click", () => {
   control.addEventListener("input", () => {
     updateDetectorFromControls();
   });
+});
+
+elements.metronomeVolumeInput.addEventListener("input", () => {
+  updateMetronomeVolumeFromControl();
 });
 
 elements.metronomeTempoInput.addEventListener("input", () => {
@@ -6729,7 +8218,7 @@ updateTimelineFullscreenButton();
 applyFullscreenWorkspaceState();
 updateExercisePanelVisibility();
 updateExerciseGuideToggleUi();
-setAppMode("live");
+setAppMode("settings");
 loadAppStats();
 loadExerciseHighScores();
 loadExerciseRepHistory();

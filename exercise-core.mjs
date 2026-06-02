@@ -417,23 +417,25 @@ export function withExerciseTempo(exercise, tempoBpm) {
 
 export function buildExerciseClickEvents(
   exercise,
-  { countInBeats = null, startDelaySeconds = 0.6, tapOffPattern = null } = {}
+  { countInBeats = null, startDelaySeconds = 0.6, tapOffPattern = null, tapOffStepBeats = 0.5 } = {}
 ) {
   const secondsPerBeat = 60 / exercise.tempoBpm;
   const countInClicks = [];
   let countInDurationSeconds = 0;
 
   if (Array.isArray(tapOffPattern) && tapOffPattern.length > 0) {
-    const tapOffStepBeats = 0.5;
-    countInDurationSeconds = tapOffPattern.length * tapOffStepBeats * secondsPerBeat;
+    const safeTapOffStepBeats = Number.isFinite(tapOffStepBeats) && tapOffStepBeats > 0
+      ? tapOffStepBeats
+      : 0.5;
+    countInDurationSeconds = tapOffPattern.length * safeTapOffStepBeats * secondsPerBeat;
     tapOffPattern.forEach((accentLevel, index) => {
       if (accentLevel === null || accentLevel === undefined) {
         return;
       }
 
       countInClicks.push({
-        timeSeconds: startDelaySeconds + index * tapOffStepBeats * secondsPerBeat,
-        beatPosition: index * tapOffStepBeats,
+        timeSeconds: startDelaySeconds + index * safeTapOffStepBeats * secondsPerBeat,
+        beatPosition: index * safeTapOffStepBeats,
         accentLevel: clamp(Number(accentLevel) || 0, 0, 2),
         type: "count-in",
       });
